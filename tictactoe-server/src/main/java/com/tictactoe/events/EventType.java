@@ -22,4 +22,8 @@ public final class EventType {
     public static final String MOVE_MADE         = "MOVE_MADE";
     public static final String GAME_OVER         = "GAME_OVER";
     public static final String PLAYER_FORFEIT    = "PLAYER_FORFEIT";
+
+
+    // Consulta
+     public static final String LIST_ONLINE_USERS      = "LIST_ONLINE_USERS";
 }
