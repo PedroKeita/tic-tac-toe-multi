@@ -1,2 +1,5 @@
 *.vscode
 *.class
+.idea/
+target/
+*.db
