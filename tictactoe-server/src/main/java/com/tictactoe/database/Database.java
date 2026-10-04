@@ -3,7 +3,6 @@ package com.tictactoe.database;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -14,16 +13,19 @@ public class Database {
 
     private static volatile Database instance;
     private final String dbUrl;
-
-    // Construtor privado para evitar instanciação direta.
-    
-    private Database(String dbUrl) {
-        this.dbUrl = (dbUrl != null && !dbUrl.trim().isEmpty()) ? dbUrl : DEFAULT_DB_URL;
-        loadDriver();
-        initSchema();
-    }
+    private final boolean inMemory;
+    private Connection sharedConnection; 
 
     // Recupera a instância Singleton usando o banco padrão.
+    private Database(String dbUrl) {
+        this.dbUrl = (dbUrl != null && !dbUrl.trim().isEmpty()) ? dbUrl : DEFAULT_DB_URL;
+        this.inMemory = this.dbUrl.contains(":memory:");
+        loadDriver();
+        if (inMemory) {
+            initSharedConnection();
+        }
+    }
+
     public static Database getInstance() {
         if (instance == null) {
             synchronized (Database.class) {
@@ -35,53 +37,55 @@ public class Database {
         return instance;
     }
 
-    // Inicializa o banco com URL customizada (útil para testes em memória).
+     // Inicializa o banco com URL customizada (útil para testes em memória).
     public static Database init(String dbUrl) {
         synchronized (Database.class) {
+            // fecha conexão anterior se existir
+            if (instance != null && instance.sharedConnection != null) {
+                try {
+                    instance.sharedConnection.close();
+                } catch (SQLException e) {
+                    LOGGER.warning("Erro ao fechar conexão anterior: " + e.getMessage());
+                }
+            }
             instance = new Database(dbUrl);
             return instance;
         }
     }
 
-    // Helper estático para inicialização do schema padrão.
-    public static void init() {
-        getInstance();
+    private void initSharedConnection() {
+        try {
+            sharedConnection = DriverManager.getConnection(dbUrl);
+            LOGGER.info("Conexão compartilhada em memória criada");
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Falha ao criar conexão em memória", e);
+            throw new RuntimeException("Não foi possível criar conexão em memória", e);
+        }
     }
 
     private void loadDriver() {
         try {
             Class.forName("org.sqlite.JDBC");
         } catch (ClassNotFoundException e) {
-            LOGGER.log(Level.SEVERE, "SQLite JDBC Driver não encontrado no classpath", e);
+            LOGGER.log(Level.SEVERE, "SQLite JDBC Driver não encontrado", e);
             throw new IllegalStateException("SQLite JDBC Driver indisponível", e);
-        }
-    }
-
-    // Garante a criação da tabela users caso não exista.
-    private void initSchema() {
-        String createUsersTableSql = "CREATE TABLE IF NOT EXISTS users ("
-                + "id INTEGER PRIMARY KEY AUTOINCREMENT, "
-                + "username TEXT UNIQUE NOT NULL, "
-                + "password_hash TEXT NOT NULL"
-                + ");";
-
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement()) {
-            stmt.execute(createUsersTableSql);
-            LOGGER.info("Database schema inicializado com sucesso (" + dbUrl + ")");
-        } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Falha ao inicializar o schema do banco", e);
-            throw new RuntimeException("Não foi possível inicializar o banco de dados", e);
         }
     }
 
     // Obtém uma nova conexão com o banco SQLite.
     // Deve ser fechada pelo chamador (preferencialmente via try-with-resources).
     public Connection getConnection() throws SQLException {
+        if (inMemory && sharedConnection != null) {
+            return sharedConnection; 
+        }
         return DriverManager.getConnection(dbUrl);
     }
 
     public String getDbUrl() {
         return dbUrl;
+    }
+
+    public boolean isInMemory() {
+        return inMemory;
     }
 }

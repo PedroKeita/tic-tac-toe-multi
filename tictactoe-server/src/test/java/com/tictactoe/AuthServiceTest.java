@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.tictactoe.auth.AuthService;
 import com.tictactoe.auth.PasswordUtils;
 import com.tictactoe.database.Database;
+import com.tictactoe.database.SchemaInitializer;
 import com.tictactoe.shared.Message;
 import com.tictactoe.shared.MessageType;
 import org.junit.Before;
@@ -25,8 +26,8 @@ public class AuthServiceTest {
 
     @Before
     public void setUp() {
-        String testDbUrl = "jdbc:sqlite:file:testdb_" + System.nanoTime() + "?mode=memory&cache=shared";
-        testDatabase = Database.init(testDbUrl);
+        testDatabase = Database.init("jdbc:sqlite::memory:");
+        new SchemaInitializer(testDatabase).initialize();
         authService = new AuthService(testDatabase);
         gson = new Gson();
     }
@@ -65,7 +66,7 @@ public class AuthServiceTest {
         assertEquals("player1", payload.get("username").getAsString());
 
         try (Connection conn = testDatabase.getConnection();
-             PreparedStatement stmt = conn.prepareStatement("SELECT * FROM users WHERE username = ?")) {
+                PreparedStatement stmt = conn.prepareStatement("SELECT * FROM users WHERE username = ?")) {
             stmt.setString(1, "player1");
             try (ResultSet rs = stmt.executeQuery()) {
                 assertTrue(rs.next());
@@ -133,4 +134,3 @@ public class AuthServiceTest {
         assertEquals("Invalid username or password", payload.get("message").getAsString());
     }
 }
-

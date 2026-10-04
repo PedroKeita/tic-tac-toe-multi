@@ -44,9 +44,12 @@ public class AuthService implements IAuthService {
         String passwordHash = PasswordUtils.hashPassword(password);
         String insertSql = "INSERT INTO users (username, password_hash) VALUES (?, ?);";
 
-        try (Connection conn = database.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(insertSql)) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
 
+        try {
+            conn = database.getConnection();
+            stmt = conn.prepareStatement(insertSql);
             stmt.setString(1, trimmedUsername);
             stmt.setString(2, passwordHash);
             stmt.executeUpdate();
@@ -64,9 +67,11 @@ public class AuthService implements IAuthService {
                 LOGGER.warning("Registro recusado - username duplicado: " + trimmedUsername);
                 return createErrorResponse(MessageType.REGISTER_ERROR, "Username already exists");
             }
-
             LOGGER.log(Level.SEVERE, "Erro inesperado ao registrar usuário: " + trimmedUsername, e);
             return createErrorResponse(MessageType.REGISTER_ERROR, "Database error during registration");
+        } finally {
+            closeQuietly(stmt);
+            closeConnectionIfNeeded(conn);
         }
     }
 
@@ -80,38 +85,65 @@ public class AuthService implements IAuthService {
         String trimmedUsername = username.trim();
         String selectSql = "SELECT password_hash FROM users WHERE username = ?;";
 
-        try (Connection conn = database.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+        Connection conn = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
 
+        try {
+            conn = database.getConnection();
+            stmt = conn.prepareStatement(selectSql);
             stmt.setString(1, trimmedUsername);
+            rs = stmt.executeQuery();
 
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (!rs.next()) {
-                    LOGGER.warning("Login falhou - usuário inexistente: " + trimmedUsername);
-                    return createErrorResponse(MessageType.LOGIN_ERROR, "Invalid username or password");
-                }
-
-                String storedPasswordHash = rs.getString("password_hash");
-
-                if (!PasswordUtils.verifyPassword(password, storedPasswordHash)) {
-                    LOGGER.warning("Login falhou - senha incorreta para: " + trimmedUsername);
-                    return createErrorResponse(MessageType.LOGIN_ERROR, "Invalid username or password");
-                }
-
-                // Gera token único de sessão para autenticação subsequente
-                String sessionToken = UUID.randomUUID().toString();
-                LOGGER.info("Usuário autenticado com sucesso: " + trimmedUsername);
-
-                JsonObject payload = new JsonObject();
-                payload.addProperty("username", trimmedUsername);
-                payload.addProperty("token", sessionToken);
-
-                return new Message(MessageType.LOGIN_SUCCESS, SERVER_SENDER, gson.toJson(payload));
+            if (!rs.next()) {
+                LOGGER.warning("Login falhou - usuário inexistente: " + trimmedUsername);
+                return createErrorResponse(MessageType.LOGIN_ERROR, "Invalid username or password");
             }
+
+            String storedPasswordHash = rs.getString("password_hash");
+
+            if (!PasswordUtils.verifyPassword(password, storedPasswordHash)) {
+                LOGGER.warning("Login falhou - senha incorreta para: " + trimmedUsername);
+                return createErrorResponse(MessageType.LOGIN_ERROR, "Invalid username or password");
+            }
+
+            String sessionToken = UUID.randomUUID().toString();
+            LOGGER.info("Usuário autenticado com sucesso: " + trimmedUsername);
+
+            JsonObject payload = new JsonObject();
+            payload.addProperty("username", trimmedUsername);
+            payload.addProperty("token", sessionToken);
+
+            return new Message(MessageType.LOGIN_SUCCESS, SERVER_SENDER, gson.toJson(payload));
 
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Erro de banco de dados durante o login: " + trimmedUsername, e);
             return createErrorResponse(MessageType.LOGIN_ERROR, "Database error during login");
+        } finally {
+            closeQuietly(rs);
+            closeQuietly(stmt);
+            closeConnectionIfNeeded(conn);
+        }
+    }
+
+    // Só fecha a conexão se NÃO for in-memory
+    private void closeConnectionIfNeeded(Connection conn) {
+        if (conn != null && !database.isInMemory()) {
+            try {
+                conn.close();
+            } catch (SQLException e) {
+                LOGGER.warning("Erro ao fechar conexão: " + e.getMessage());
+            }
+        }
+    }
+
+    private void closeQuietly(AutoCloseable resource) {
+        if (resource != null) {
+            try {
+                resource.close();
+            } catch (Exception e) {
+                LOGGER.warning("Erro ao fechar recurso: " + e.getMessage());
+            }
         }
     }
 
@@ -122,7 +154,7 @@ public class AuthService implements IAuthService {
 
     private boolean isValidCredentialInput(String username, String password) {
         return username != null && !username.trim().isEmpty()
-                && password != null && !password.isEmpty();
+                && password != null && !password.trim().isEmpty();
     }
 
     private Message createErrorResponse(MessageType errorType, String errorMessage) {
