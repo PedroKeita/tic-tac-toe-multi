@@ -4,6 +4,7 @@ import com.tictactoe.auth.AuthService;
 import com.tictactoe.database.Database;
 import com.tictactoe.database.SchemaInitializer;
 import com.tictactoe.events.EventBus;
+import com.tictactoe.lobby.LobbyManager;
 import com.tictactoe.server.GameServer;
 
 import java.util.logging.Logger;
@@ -25,6 +26,10 @@ public class App {
         // Services
         AuthService authService = new AuthService(database);
         EventBus eventBus = new EventBus();
+
+        // Lobby: escuta os eventos de login/logout/convites publicados pelo ClientHandler
+        LobbyManager lobbyManager = new LobbyManager();
+        lobbyManager.registerEventHandlers(eventBus);
         LOGGER.info("Serviços inicializados");
 
         // Server WebSocket
