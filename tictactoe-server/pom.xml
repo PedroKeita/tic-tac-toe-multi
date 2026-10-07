@@ -57,7 +57,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.tictactoe.Main</mainClass>
+                            <mainClass>com.tictactoe.App</mainClass>
                         </manifest>
                     </archive>
                 </configuration>

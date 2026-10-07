@@ -56,26 +56,30 @@ public class AuthServiceTest {
     }
 
     @Test
-    public void testRegisterSuccess() throws SQLException {
-        Message response = authService.register("player1", "pass123");
+public void testRegisterSuccess() throws SQLException {
+    Message response = authService.register("player1", "pass123");
 
-        assertEquals(MessageType.REGISTER_SUCCESS, response.getType());
-        assertEquals("SERVER", response.getSender());
+    assertEquals(MessageType.REGISTER_SUCCESS, response.getType());
+    assertEquals("SERVER", response.getSender());
 
-        JsonObject payload = gson.fromJson(response.getPayload(), JsonObject.class);
-        assertEquals("player1", payload.get("username").getAsString());
+    JsonObject payload = gson.fromJson(response.getPayload(), JsonObject.class);
+    assertEquals("player1", payload.get("username").getAsString());
 
-        try (Connection conn = testDatabase.getConnection();
-                PreparedStatement stmt = conn.prepareStatement("SELECT * FROM users WHERE username = ?")) {
-            stmt.setString(1, "player1");
-            try (ResultSet rs = stmt.executeQuery()) {
-                assertTrue(rs.next());
-                assertEquals("player1", rs.getString("username"));
-                assertNotEquals("pass123", rs.getString("password_hash"));
-                assertTrue(PasswordUtils.verifyPassword("pass123", rs.getString("password_hash")));
-            }
-        }
-    }
+    // Não usa try-with-resources para não fechar a conexão compartilhada
+    Connection conn = testDatabase.getConnection();
+    PreparedStatement stmt = conn.prepareStatement("SELECT * FROM users WHERE username = ?");
+    stmt.setString(1, "player1");
+    ResultSet rs = stmt.executeQuery();
+
+    assertTrue(rs.next());
+    assertEquals("player1", rs.getString("username"));
+    assertNotEquals("pass123", rs.getString("password_hash"));
+    assertTrue(PasswordUtils.verifyPassword("pass123", rs.getString("password_hash")));
+
+    rs.close();
+    stmt.close();
+    // Não fecha conn — é compartilhada
+}
 
     @Test
     public void testRegisterDuplicateUsernameFails() {
