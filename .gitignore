@@ -2,4 +2,4 @@
 *.class
 .idea/
 target/
-*.db
+*.db    

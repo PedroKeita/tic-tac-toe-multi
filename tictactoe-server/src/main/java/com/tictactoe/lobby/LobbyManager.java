@@ -174,4 +174,8 @@ public class LobbyManager {
             session.sendError(errorMessage);
         }
     }
+
+    public ClientHandler getHandler(String username) {
+    return players.get(username);
+    }
 }

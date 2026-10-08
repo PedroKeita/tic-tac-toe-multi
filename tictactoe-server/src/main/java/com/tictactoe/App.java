@@ -4,6 +4,7 @@ import com.tictactoe.auth.AuthService;
 import com.tictactoe.database.Database;
 import com.tictactoe.database.SchemaInitializer;
 import com.tictactoe.events.EventBus;
+import com.tictactoe.game.GameManager;
 import com.tictactoe.lobby.LobbyManager;
 import com.tictactoe.server.GameServer;
 
@@ -15,7 +16,6 @@ public class App {
     private static final int PORT = 8080;
 
     public static void main(String[] args) {
-
         LOGGER.info("Iniciando TicTacToe Server...");
 
         // Banco de dados
@@ -24,13 +24,15 @@ public class App {
         LOGGER.info("Banco de dados pronto");
 
         // Services
-        AuthService authService = new AuthService(database);
-        EventBus eventBus = new EventBus();
+        EventBus     eventBus    = new EventBus();
+        AuthService  authService = new AuthService(database);
+        LobbyManager lobby       = new LobbyManager();
+        GameManager  gameManager = new GameManager(lobby);
 
-        // Lobby: escuta os eventos de login/logout/convites publicados pelo ClientHandler
-        LobbyManager lobbyManager = new LobbyManager();
-        lobbyManager.registerEventHandlers(eventBus);
-        LOGGER.info("Serviços inicializados");
+         // Lobby: escuta os eventos de login/logout/convites publicados pelo ClientHandler
+        lobby.registerEventHandlers(eventBus);
+        gameManager.registerEventHandlers(eventBus);
+        LOGGER.info("Services inicializados");
 
         // Server WebSocket
         GameServer server = new GameServer(PORT, eventBus, authService);
