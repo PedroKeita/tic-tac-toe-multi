@@ -1,7 +1,7 @@
 package com.tictactoe.shared;
 
 public enum MessageType {
-    
+
     // Auth
     REGISTER,
     REGISTER_SUCCESS,
@@ -23,6 +23,7 @@ public enum MessageType {
     // Game
     MAKE_MOVE,
     BOARD_UPDATE,
+    GAME_STARTED,
     GAME_OVER,
     FORFEIT,
 
