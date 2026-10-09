@@ -10,7 +10,7 @@ export default function Home() {
 
   const handlePlayClick = () => {
     if (isAuthenticated) {
-      navigate('/lobby');
+      navigate('/game-mode');
     } else {
       navigate('/login');
     }

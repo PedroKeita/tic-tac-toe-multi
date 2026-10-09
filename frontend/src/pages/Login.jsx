@@ -50,7 +50,7 @@ export default function Login() {
 
     try {
       await login(formData.email, formData.password);
-      navigate('/');
+      navigate('/game-mode');
     } catch (err) {
       console.error('Falha no login:', err);
     }

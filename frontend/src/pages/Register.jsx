@@ -63,7 +63,7 @@ export default function Register() {
         password: formData.password,
         confirmPassword: formData.confirmPassword,
       });
-      navigate('/');
+      navigate('/game-mode');
     } catch (err) {
       console.error('Falha no registro:', err);
     }
