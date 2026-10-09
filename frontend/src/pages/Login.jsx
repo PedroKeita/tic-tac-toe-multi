@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/Card';
 import HeaderBar from '../components/HeaderBar';
@@ -11,7 +11,7 @@ export default function Login() {
   const { login, isLoading, error: authError, setError } = useAuth();
 
   const [formData, setFormData] = useState({
-    email: '',
+    username: '',
     password: '',
   });
 
@@ -19,16 +19,12 @@ export default function Login() {
 
   const validate = () => {
     const errors = {};
-    if (!formData.email.trim()) {
-      errors.email = 'O e-mail é obrigatório.';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      errors.email = 'Insira um e-mail válido.';
+    if (!formData.username.trim()) {
+      errors.username = 'O username e obrigatorio.';
     }
-
     if (!formData.password) {
-      errors.password = 'A senha é obrigatória.';
+      errors.password = 'A senha e obrigatoria.';
     }
-
     setLocalErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -49,7 +45,7 @@ export default function Login() {
     if (!validate()) return;
 
     try {
-      await login(formData.email, formData.password);
+      await login(formData.username, formData.password);
       navigate('/game-mode');
     } catch (err) {
       console.error('Falha no login:', err);
@@ -59,31 +55,26 @@ export default function Login() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 md:p-8 bg-[#eceef2]">
       <Card>
-        {/* Cabeçalho com título estilizado e barra bipartida */}
         <HeaderBar title="LOGIN" />
 
-        {/* Formulário Centralizado */}
         <form onSubmit={handleSubmit} className="w-full max-w-sm flex flex-col items-center space-y-4 my-auto">
-          {/* Label de seção sutil conforme o layout Figma */}
           <div className="w-full text-left">
             <span className="text-xs font-semibold text-neutral-400">Frame</span>
           </div>
 
-          {/* Campo Email */}
           <div className="w-full">
             <Input
-              id="email"
-              type="email"
-              placeholder="Email"
-              value={formData.email}
+              id="username"
+              type="text"
+              placeholder="Username"
+              value={formData.username}
               onChange={handleChange}
-              error={localErrors.email}
+              error={localErrors.username}
               isActive={true}
-              autoComplete="email"
+              autoComplete="username"
             />
           </div>
 
-          {/* Campo Senha */}
           <div className="w-full">
             <Input
               id="password"
@@ -96,14 +87,12 @@ export default function Login() {
             />
           </div>
 
-          {/* Mensagem de Erro Geral da Autenticação */}
           {authError && (
             <div className="w-full p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs text-center font-medium">
               {authError}
             </div>
           )}
 
-          {/* Botão de Envio (Continue) */}
           <div className="w-full pt-2">
             <Button
               type="submit"
@@ -115,7 +104,6 @@ export default function Login() {
             </Button>
           </div>
 
-          {/* Botão Secundário para Cadastro (Criar uma conta) */}
           <div className="w-full pt-1">
             <Button
               type="button"
@@ -128,7 +116,6 @@ export default function Login() {
           </div>
         </form>
 
-        {/* Rodapé / Espaçador para manter alinhamento do card */}
         <div className="h-6" />
       </Card>
     </div>

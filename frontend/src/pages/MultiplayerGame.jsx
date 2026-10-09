@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useGameSocket } from '../hooks/useGameSocket';
 import Card from '../components/Card';
@@ -8,250 +8,135 @@ import ChalkBoard from '../components/ChalkBoard';
 import PlayerGameCard from '../components/PlayerGameCard';
 import WaitingPlayerCard from '../components/WaitingPlayerCard';
 
-const WINNING_LINES = [
-  [0, 1, 2],
-  [3, 4, 5],
-  [6, 7, 8],
-  [0, 3, 6],
-  [1, 4, 7],
-  [2, 5, 8],
-  [0, 4, 8],
-  [2, 4, 6],
-];
+function boardIntToDisplay(intBoard) {
+  return intBoard.map((cell) => {
+    if (cell === 1) return 'X';
+    if (cell === 2) return 'O';
+    return null;
+  });
+}
 
 export default function MultiplayerGame() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { user } = useAuth();
-  const { emit, on, off } = useGameSocket();
+  const { send, on, off } = useGameSocket();
 
-  // Parâmetros da rota
-  const initialStatus = searchParams.get('status') || 'waiting';
-  const initialRoomId = searchParams.get('roomId');
-  const initialOpponent = searchParams.get('opponent');
+  const gameInfo = location.state || {};
 
-  // Estados principais do Multiplayer
-  const [gameState, setGameState] = useState(initialRoomId ? 'playing' : initialStatus); // 'waiting' | 'playing'
-  const [roomId, setRoomId] = useState(initialRoomId || null);
-  const [opponent, setOpponent] = useState(
-    initialOpponent ? { name: initialOpponent, symbol: 'X' } : null
+  const [gameId, setGameId] = useState(gameInfo.gameId || null);
+  const [mySymbol, setMySymbol] = useState(gameInfo.symbol || null);
+  const [opponent, setOpponent] = useState(gameInfo.opponent || null);
+  const [board, setBoard] = useState(
+    gameInfo.board ? boardIntToDisplay(gameInfo.board) : Array(9).fill(null)
   );
-
-  const [board, setBoard] = useState(Array(9).fill(null));
-  const [turn, setTurn] = useState('O'); // 'O' = Jogador local, 'X' = Oponente
+  const [isMyTurn, setIsMyTurn] = useState(gameInfo.yourTurn || false);
   const [isGameOver, setIsGameOver] = useState(false);
-  const [gameResult, setGameResult] = useState(null); // 'win' | 'draw' | 'defeat'
-  const [rematchStatus, setRematchStatus] = useState(null);
+  const [gameResult, setGameResult] = useState(null);
 
-  /**
-   * Avalia vitória
-   */
-  const checkWinner = (currentBoard) => {
-    for (const [a, b, c] of WINNING_LINES) {
-      if (
-        currentBoard[a] &&
-        currentBoard[a] === currentBoard[b] &&
-        currentBoard[a] === currentBoard[c]
-      ) {
-        return currentBoard[a];
-      }
-    }
-    return null;
-  };
-
-  /**
-   * Avalia empate
-   */
-  const checkDraw = (currentBoard) => {
-    return currentBoard.every((cell) => cell !== null);
-  };
-
-  // 1. Ciclo de Conexão e Eventos WebSocket
   useEffect(() => {
-    // Quando uma sala é criada
-    const handleRoomCreated = ({ roomId: newId }) => {
-      setRoomId(newId);
-    };
-
-    // Quando um oponente entra na sala de espera
-    const handlePlayerJoined = ({ opponent: oppData }) => {
-      setOpponent(oppData);
-      setGameState('playing');
-    };
-
-    // Quando o jogador entrou em uma sala existente
-    const handleJoinedRoom = ({ roomId: joinedId, opponent: oppData }) => {
-      setRoomId(joinedId);
-      setOpponent(oppData);
-      setGameState('playing');
-    };
-
-    // Quando o oponente faz uma jogada
-    const handleOpponentMove = ({ cellIndex, symbol }) => {
-      setBoard((prev) => {
-        if (prev[cellIndex] !== null) return prev;
-        const nextBoard = [...prev];
-        nextBoard[cellIndex] = symbol || 'X';
-
-        const winner = checkWinner(nextBoard);
-        if (winner === 'X') {
-          setIsGameOver(true);
-          setGameResult('defeat');
-        } else if (checkDraw(nextBoard)) {
-          setIsGameOver(true);
-          setGameResult('draw');
-        } else {
-          setTurn('O');
-        }
-
-        return nextBoard;
-      });
-    };
-
-    // Quando a revanche é aceita
-    const handleRematchAccepted = () => {
-      setBoard(Array(9).fill(null));
-      setTurn('O');
-      setIsGameOver(false);
-      setGameResult(null);
-      setRematchStatus(null);
-    };
-
-    on('room_created', handleRoomCreated);
-    on('player_joined', handlePlayerJoined);
-    on('joined_room', handleJoinedRoom);
-    on('opponent_move', handleOpponentMove);
-    on('rematch_accepted', handleRematchAccepted);
-
-    // Inicialização do fluxo de acordo com os parâmetros da URL
-    if (initialRoomId) {
-      emit('join_room', { roomId: initialRoomId, player: user });
-    } else {
-      emit('create_room', { hostId: user?.id, hostName: user?.name || 'Você' });
+    if (!gameId) {
+      navigate('/lobby');
+      return;
     }
+
+    const handleBoardUpdate = (msg) => {
+      const payload = JSON.parse(msg.payload);
+      if (payload.gameId !== gameId) return;
+
+      setBoard(boardIntToDisplay(payload.board));
+      setIsMyTurn(payload.currentTurn === user?.username);
+    };
+
+    const handleGameOver = (msg) => {
+      const payload = JSON.parse(msg.payload);
+      if (payload.gameId !== gameId) return;
+
+      setBoard(boardIntToDisplay(payload.board));
+      setIsGameOver(true);
+
+      if (payload.result === 'DRAW') {
+        setGameResult('draw');
+      } else if (payload.winner === user?.username) {
+        setGameResult('win');
+      } else {
+        setGameResult('defeat');
+      }
+    };
+
+    const handleError = (msg) => {
+      const payload = JSON.parse(msg.payload);
+      console.warn('[Game] Error:', payload.message);
+    };
+
+    on('BOARD_UPDATE', handleBoardUpdate);
+    on('GAME_OVER', handleGameOver);
+    on('ERROR', handleError);
 
     return () => {
-      off('room_created', handleRoomCreated);
-      off('player_joined', handlePlayerJoined);
-      off('joined_room', handleJoinedRoom);
-      off('opponent_move', handleOpponentMove);
-      off('rematch_accepted', handleRematchAccepted);
+      off('BOARD_UPDATE', handleBoardUpdate);
+      off('GAME_OVER', handleGameOver);
+      off('ERROR', handleError);
     };
-  }, [emit, on, off, initialRoomId, user]);
+  }, [gameId, on, off, user, navigate]);
 
-  /**
-   * Clique do jogador local em uma célula do tabuleiro
-   */
-  const handleCellClick = (index) => {
-    if (
-      board[index] !== null ||
-      turn !== 'O' ||
-      gameState !== 'playing' ||
-      isGameOver
-    ) {
-      return;
+  const handleCellClick = useCallback((index) => {
+    if (board[index] !== null || !isMyTurn || isGameOver) return;
+
+    send('MAKE_MOVE', { position: index });
+  }, [board, isMyTurn, isGameOver, send]);
+
+  const handleExit = useCallback(() => {
+    if (!isGameOver) {
+      send('FORFEIT', {});
     }
-
-    const nextBoard = [...board];
-    nextBoard[index] = 'O';
-    setBoard(nextBoard);
-
-    const winner = checkWinner(nextBoard);
-    if (winner === 'O') {
-      setIsGameOver(true);
-      setGameResult('win');
-      emit('make_move', { roomId, cellIndex: index, symbol: 'O', board: nextBoard });
-      return;
-    }
-
-    if (checkDraw(nextBoard)) {
-      setIsGameOver(true);
-      setGameResult('draw');
-      emit('make_move', { roomId, cellIndex: index, symbol: 'O', board: nextBoard });
-      return;
-    }
-
-    setTurn('X');
-    emit('make_move', { roomId, cellIndex: index, symbol: 'O', board: nextBoard });
-  };
-
-  /**
-   * Solicitar Revanche
-   */
-  const handlePlayAgain = () => {
-    setRematchStatus('Aguardando oponente aceitar...');
-    emit('request_rematch', { roomId, by: 'You' });
-  };
-
-  /**
-   * Sair da Partida
-   */
-  const handleExit = () => {
-    emit('leave_room', { roomId });
     navigate('/lobby');
-  };
+  }, [isGameOver, send, navigate]);
+
+  const handlePlayAgain = useCallback(() => {
+    navigate('/lobby');
+  }, [navigate]);
+
+  const opponentSymbol = mySymbol === 'X' ? 'O' : 'X';
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 md:p-8 bg-[#eceef2]">
       <Card className="min-h-[620px] max-w-[920px] justify-between">
-        {/* Cabeçalho condicional: no estado 'waiting' mostra 'ESPERANDO O OUTRO JOGADOR..' com barra */}
-        {gameState === 'waiting' ? (
-          <HeaderBar title="ESPERANDO O OUTRO JOGADOR.." />
-        ) : (
-          <div className="w-full flex justify-center mb-6">
-            <div className="w-full max-w-xl h-2 flex items-center rounded-full overflow-hidden shadow-sm">
-              <div className="w-1/2 h-full bg-[#22a6fe]" />
-              <div className="w-1/2 h-full bg-[#f25b2a]" />
-            </div>
+        <div className="w-full flex justify-center mb-6">
+          <div className="w-full max-w-xl h-2 flex items-center rounded-full overflow-hidden shadow-sm">
+            <div className="w-1/2 h-full bg-[#22a6fe]" />
+            <div className="w-1/2 h-full bg-[#f25b2a]" />
           </div>
-        )}
+        </div>
 
-        {/* Feedback visual discreto de revanche se ativado */}
-        {rematchStatus && (
-          <div className="text-center -mt-2 mb-2">
-            <span className="text-xs font-semibold text-blue-600 animate-pulse bg-blue-50 border border-blue-200 px-3 py-1 rounded-full">
-              {rematchStatus}
-            </span>
-          </div>
-        )}
-
-        {/* Área Central: Jogador - Tabuleiro - Oponente (ou Card de Espera) */}
         <div className="w-full flex flex-row items-center justify-center gap-4 sm:gap-6 md:gap-8 lg:gap-10 my-auto px-2">
-          {/* Card Esquerdo: Jogador Local (Sempre 'You' e 'O') */}
           <PlayerGameCard
             type="player"
-            name="You"
-            symbol="O"
-            isTurn={gameState === 'playing' && turn === 'O' && !isGameOver}
+            name={user?.username || 'Voce'}
+            symbol={mySymbol || 'O'}
+            isTurn={isMyTurn && !isGameOver}
             isThinking={false}
           />
 
-          {/* Centro: Quadro de Giz (Tabuleiro ou Overlays de Fim de Jogo) */}
           <ChalkBoard
             board={board}
             onCellClick={handleCellClick}
-            disabled={gameState !== 'playing' || turn !== 'O' || isGameOver}
+            disabled={!isMyTurn || isGameOver}
             isGameOver={isGameOver}
             gameResult={gameResult}
             onPlayAgain={handlePlayAgain}
             onExit={handleExit}
           />
 
-          {/* Card Direito: Se estiver esperando exibe WaitingPlayerCard, senão PlayerGameCard do Oponente */}
-          {gameState === 'waiting' ? (
-            <WaitingPlayerCard message="..." />
-          ) : (
-            <PlayerGameCard
-              type="bot"
-              name={opponent?.name || 'Jogador 2'}
-              symbol="X"
-              isTurn={turn === 'X' && !isGameOver}
-              isThinking={turn === 'X'}
-            />
-          )}
+          <PlayerGameCard
+            type="bot"
+            name={opponent || 'Oponente'}
+            symbol={opponentSymbol || 'X'}
+            isTurn={!isMyTurn && !isGameOver}
+            isThinking={!isMyTurn && !isGameOver}
+          />
         </div>
 
-        {/* Rodapé equilibrado */}
         <div className="h-4" />
       </Card>
     </div>

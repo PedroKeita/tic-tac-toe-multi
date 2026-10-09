@@ -8,10 +8,10 @@ import Button from '../components/Button';
 
 export default function Register() {
   const navigate = useNavigate();
-  const { register, isLoading, error: authError, setError } = useAuth();
+  const { register, login, isLoading, error: authError, setError } = useAuth();
 
   const [formData, setFormData] = useState({
-    email: '',
+    username: '',
     password: '',
     confirmPassword: '',
   });
@@ -20,24 +20,19 @@ export default function Register() {
 
   const validate = () => {
     const errors = {};
-    if (!formData.email.trim()) {
-      errors.email = 'O e-mail é obrigatório.';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      errors.email = 'Insira um e-mail válido.';
+    if (!formData.username.trim()) {
+      errors.username = 'O username e obrigatorio.';
     }
-
     if (!formData.password) {
-      errors.password = 'A senha é obrigatória.';
+      errors.password = 'A senha e obrigatoria.';
     } else if (formData.password.length < 6) {
-      errors.password = 'A senha deve ter no mínimo 6 caracteres.';
+      errors.password = 'A senha deve ter no minimo 6 caracteres.';
     }
-
     if (!formData.confirmPassword) {
       errors.confirmPassword = 'Confirme sua senha.';
     } else if (formData.password !== formData.confirmPassword) {
-      errors.confirmPassword = 'As senhas não coincidem.';
+      errors.confirmPassword = 'As senhas nao coincidem.';
     }
-
     setLocalErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -59,10 +54,11 @@ export default function Register() {
 
     try {
       await register({
-        email: formData.email,
+        username: formData.username,
         password: formData.password,
         confirmPassword: formData.confirmPassword,
       });
+      await login(formData.username, formData.password);
       navigate('/game-mode');
     } catch (err) {
       console.error('Falha no registro:', err);
@@ -72,26 +68,22 @@ export default function Register() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 md:p-8 bg-[#eceef2]">
       <Card>
-        {/* Cabeçalho com título serifado e barra bipartida */}
         <HeaderBar title="REGISTRO" />
 
-        {/* Formulário Centralizado */}
         <form onSubmit={handleSubmit} className="w-full max-w-sm flex flex-col items-center space-y-3.5 my-auto">
-          {/* Campo Email */}
           <div className="w-full">
             <Input
-              id="email"
-              type="email"
-              placeholder="Email"
-              value={formData.email}
+              id="username"
+              type="text"
+              placeholder="Username"
+              value={formData.username}
               onChange={handleChange}
-              error={localErrors.email}
+              error={localErrors.username}
               isActive={true}
-              autoComplete="email"
+              autoComplete="username"
             />
           </div>
 
-          {/* Campo Senha */}
           <div className="w-full">
             <Input
               id="password"
@@ -104,7 +96,6 @@ export default function Register() {
             />
           </div>
 
-          {/* Campo Confirmar Senha */}
           <div className="w-full">
             <Input
               id="confirmPassword"
@@ -117,14 +108,12 @@ export default function Register() {
             />
           </div>
 
-          {/* Mensagem de Erro Geral */}
           {authError && (
             <div className="w-full p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs text-center font-medium">
               {authError}
             </div>
           )}
 
-          {/* Botão de Envio (Continuar) */}
           <div className="w-full pt-2">
             <Button
               type="submit"
@@ -136,33 +125,16 @@ export default function Register() {
             </Button>
           </div>
 
-          {/* Opção de autenticação social (conforme layout do Figma) */}
-          <div className="pt-2 flex flex-col items-center space-y-2">
-            <span className="text-xs font-semibold text-blue-600">
-              ou continuar com
-            </span>
-            <button
-              type="button"
-              onClick={() => alert('Login com Google simulado!')}
-              className="w-9 h-9 bg-neutral-100 hover:bg-neutral-200 active:scale-95 transition-all rounded-lg shadow-sm flex items-center justify-center font-bold text-neutral-700 text-sm cursor-pointer"
-              title="Continuar com Google"
-            >
-              G
-            </button>
-          </div>
-
-          {/* Link para retornar ao Login */}
           <div className="pt-2">
             <Link
               to="/login"
               className="text-xs text-neutral-500 hover:text-neutral-800 underline transition-colors"
             >
-              Já possui uma conta? Fazer login
+              Ja possui uma conta? Fazer login
             </Link>
           </div>
         </form>
 
-        {/* Rodapé / Espaçador para manter alinhamento do card */}
         <div className="h-4" />
       </Card>
     </div>

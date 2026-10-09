@@ -22,7 +22,7 @@ export default function Home() {
       {isAuthenticated && user && (
         <div className="absolute top-6 right-6 flex items-center gap-3 bg-white/80 backdrop-blur-md px-4 py-2 rounded-2xl shadow-sm border border-neutral-200">
           <span className="text-sm font-medium text-neutral-700">
-            Olá, <strong className="text-neutral-900">{user.name}</strong>
+            Olá, <strong className="text-neutral-900">{user.username}</strong>
           </span>
           <button
             onClick={logout}
