@@ -96,10 +96,30 @@ Abra o **Console do Desenvolvedor** no seu navegador (`F12` ou `Ctrl + Shift + I
 
 ---
 
-### 6. Tela de Lobby & WebSocket Mock (`/lobby`)
-- **Proteção de Rota:** Redireciona para o login se não autenticado.
-- **Status do WebSocket:** Simulação ativa com eventos exibidos no console (`F12`).
-- **Buscar Partida / Criar Sala:** Emite eventos mockados.
+### 6. Tela de Lobby & Salas Disponíveis (`/lobby`)
+- **Quadro de Salas:** Exibe as salas abertas dentro da lousa de giz (`RoomListBoard`).
+  - Lista nomes dos hosts (ex: "Pedro", "Davi", etc.) em tom azul de giz.
+  - Botão azul **"Entrar"** direciona para a partida naquela sala.
+  - Selo laranja **"Lotada"** para salas cheias.
+- **Criar Minha Sala:** Direciona para a sala em modo de espera (`/game/multiplayer?status=waiting&create=true`).
+
+---
+
+### 7. Partida Multiplayer Online (`/game/multiplayer`)
+- **Estado 1: Aguardando Oponente (`waiting`):**
+  - Título: `"ESPERANDO O OUTRO JOGADOR.."`.
+  - Card da esquerda: Jogador local ("You").
+  - Centro: Tabuleiro de giz bloqueado.
+  - Card da direita: Card de espera (`WaitingPlayerCard`) com o ponto de interrogação **?** e animação **...**.
+  - *Simulação WebSocket:* Após 3.5 segundos em espera, dispara o evento `player_joined` e o oponente se conecta automaticamente!
+- **Estado 2: Partida em Andamento (`playing`):**
+  - Card da direita atualiza para o oponente conectado (ex: "Pedro" ou "Jogador 2") com símbolo **X**.
+  - Tabuleiro interativo: ao fazer sua jogada (**O**), o evento `make_move` é emitido.
+  - O oponente responde após 1.2s a 1.8s simulando latência de rede natural (`opponent_move`).
+- **Estado 3: Fim de Partida e Revanche:**
+  - Reutiliza 100% dos overlays de **Vitória**, **Empate** e **Derrota** com os mesmos componentes do Single Player.
+  - Botão **"Jogar novamente"**: Emite `request_rematch` no socket e reinicia a partida quando aceito.
+  - Botão **"Sair"**: Emite `leave_room` e retorna para o `/lobby`.
 
 ---
 
@@ -111,24 +131,27 @@ frontend/
 │   ├── components/
 │   │   ├── Button.jsx            # Botões reutilizáveis
 │   │   ├── Card.jsx              # Card arredondado da interface
-│   │   ├── ChalkBoard.jsx        # Tabuleiro estilo lousa de giz com moldura de madeira
+│   │   ├── ChalkBoard.jsx        # Lousa de giz com moldura de madeira e suporte a children
 │   │   ├── GameResultOverlay.jsx # Overlays de Vitória, Empate e Derrota com pixel art
 │   │   ├── HeaderBar.jsx         # Título serifado e barra bipartida
 │   │   ├── Input.jsx             # Inputs estilizados
 │   │   ├── LoadingSpinner.jsx    # Spinner animado
-│   │   ├── PlayerGameCard.jsx    # Cards laterais do jogador e do bot
+│   │   ├── PlayerGameCard.jsx    # Cards simétricos do jogador e do oponente
+│   │   ├── RoomListBoard.jsx     # Lista de salas renderizada na lousa de giz
+│   │   ├── WaitingPlayerCard.jsx # Card de espera com '?' e '...'
 │   │   └── TicTacToeLogo.jsx     # Logo do jogo da velha inclinado da Home
 │   ├── context/
 │   │   └── AuthContext.jsx       # Autenticação e persistência
 │   ├── hooks/
-│   │   └── useGameSocket.js      # Gerenciamento de eventos WebSocket (Mock)
+│   │   └── useGameSocket.js      # WebSocket mock com simulador de salas, jogadas e revanche
 │   ├── pages/
 │   │   ├── Home.jsx              # Tela Inicial (Print 1)
 │   │   ├── Login.jsx             # Tela de Login (Print 2)
 │   │   ├── Register.jsx          # Tela de Criação de Conta (Print 3)
 │   │   ├── GameMode.jsx          # Tela de Seleção de Modos (Print 4)
-│   │   ├── SinglePlayerGame.jsx  # Tela da Partida Single Player com Bot (Print 5 a 8)
-│   │   └── Lobby.jsx             # Lobby Multiplayer
+│   │   ├── SinglePlayerGame.jsx  # Partida contra o Bot (Print 5 a 8)
+│   │   ├── Lobby.jsx             # Salas Disponíveis (Print 9)
+│   │   └── MultiplayerGame.jsx   # Partida Online e Espera de Oponente (Print 10 a 14)
 │   ├── routes/
 │   │   └── AppRoutes.jsx         # Gerenciamento de rotas e proteção
 │   ├── App.jsx                   # Provedor raiz

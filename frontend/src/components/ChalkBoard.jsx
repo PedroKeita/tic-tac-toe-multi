@@ -9,6 +9,7 @@ export default function ChalkBoard({
   gameResult = null, // 'win' | 'draw' | 'defeat'
   onPlayAgain,
   onExit,
+  children,
 }) {
   return (
     <div className="relative select-none flex flex-col items-center">
@@ -37,15 +38,17 @@ export default function ChalkBoard({
               boxShadow: 'inset 0 0 40px rgba(0,0,0,0.85)',
             }}
           >
-            {/* Se o jogo terminou, exibe o Overlay de Resultado */}
-            {isGameOver && gameResult ? (
+            {/* Se houver filhos customizados (ex: Lista de Salas no Lobby), renderiza-os */}
+            {children ? (
+              children
+            ) : isGameOver && gameResult ? (
               <GameResultOverlay
                 status={gameResult}
                 onPlayAgain={onPlayAgain}
                 onExit={onExit}
               />
             ) : (
-              /* Container rigorosamente QUADRADO para alinhar 1:1 o Grid de botões com as Linhas de Giz */
+              /* Container rigorosamente QUADRADO para alinhar 1:1 o Grid com as Linhas de Giz */
               <div className="relative w-[210px] h-[210px] sm:w-[250px] sm:h-[250px] md:w-[285px] md:h-[285px] aspect-square flex items-center justify-center">
                 {/* Linhas da Grade de Giz perfeitamente coincidentes em 1/3 (100px) e 2/3 (200px) */}
                 <svg
@@ -53,7 +56,6 @@ export default function ChalkBoard({
                   viewBox="0 0 300 300"
                   fill="none"
                 >
-                  {/* Linhas Verticais de Giz */}
                   <line
                     x1="100"
                     y1="10"
@@ -74,7 +76,6 @@ export default function ChalkBoard({
                     strokeLinecap="round"
                     strokeOpacity="0.9"
                   />
-                  {/* Linhas Horizontais de Giz */}
                   <line
                     x1="10"
                     y1="100"
@@ -97,7 +98,7 @@ export default function ChalkBoard({
                   />
                 </svg>
 
-                {/* Grade 3x3 de Botões/Células rigorosamente mapeada sobre o mesmo quadrado */}
+                {/* Grade 3x3 de Botões/Células */}
                 <div className="grid grid-cols-3 grid-rows-3 w-full h-full relative z-10">
                   {board.map((cell, index) => (
                     <button
@@ -111,12 +112,10 @@ export default function ChalkBoard({
                           : 'cursor-default'
                       }`}
                     >
-                      {/* Símbolo O (Azul) centralizado dentro do quadrante */}
                       {cell === 'O' && (
                         <div className="w-11 h-11 sm:w-13 sm:h-13 md:w-15 md:h-15 rounded-full border-[5px] sm:border-[6px] border-[#22a6fe] shadow-[0_0_12px_rgba(34,166,254,0.7)] animate-scaleUp" />
                       )}
 
-                      {/* Símbolo X (Laranja) centralizado dentro do quadrante */}
                       {cell === 'X' && (
                         <div className="relative w-11 h-11 sm:w-13 sm:h-13 md:w-15 md:h-15 flex items-center justify-center animate-scaleUp">
                           <span className="absolute w-11 sm:w-13 md:w-15 h-1.5 sm:h-2 bg-[#f25b2a] rotate-45 rounded-full shadow-[0_0_12px_rgba(242,91,42,0.7)]" />
@@ -124,7 +123,6 @@ export default function ChalkBoard({
                         </div>
                       )}
 
-                      {/* Ghost preview suave ao passar o mouse */}
                       {!disabled && cell === null && (
                         <div className="opacity-0 group-hover:opacity-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full border-4 border-[#22a6fe] transition-opacity" />
                       )}
@@ -136,16 +134,14 @@ export default function ChalkBoard({
           </div>
         </div>
 
-        {/* Peças de Giz na Base Direita do Quadro (Fiel ao layout do Figma) */}
+        {/* Peças de Giz na Base Direita do Quadro */}
         <div className="absolute -bottom-1 right-6 flex items-end gap-1.5 z-20 pointer-events-none">
-          {/* Giz 1 horizontal */}
           <div
             className="w-7 h-2 bg-[#f8fafc] rounded-sm shadow-md"
             style={{
               boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
             }}
           />
-          {/* Giz 2 inclinado */}
           <div
             className="w-7 h-2 bg-[#e2e8f0] rounded-sm shadow-md transform rotate-[-12deg]"
             style={{

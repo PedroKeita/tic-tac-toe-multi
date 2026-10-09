@@ -6,6 +6,7 @@ import Register from '../pages/Register';
 import Lobby from '../pages/Lobby';
 import GameMode from '../pages/GameMode';
 import SinglePlayerGame from '../pages/SinglePlayerGame';
+import MultiplayerGame from '../pages/MultiplayerGame';
 import { useAuth } from '../context/AuthContext';
 
 function ProtectedRoute({ children }) {
@@ -43,12 +44,22 @@ export default function AppRoutes() {
         }
       />
 
-      {/* Lobby / Multiplayer */}
+      {/* Lobby / Lista de Salas Disponíveis */}
       <Route
         path="/lobby"
         element={
           <ProtectedRoute>
             <Lobby />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Partida Multiplayer Online */}
+      <Route
+        path="/game/multiplayer"
+        element={
+          <ProtectedRoute>
+            <MultiplayerGame />
           </ProtectedRoute>
         }
       />
