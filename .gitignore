@@ -1,5 +1,8 @@
 *.vscode
 *.class
 .idea/
+*.db
+
+# Maven generated files
 target/
-*.db    
+dependency-reduced-pom.xml

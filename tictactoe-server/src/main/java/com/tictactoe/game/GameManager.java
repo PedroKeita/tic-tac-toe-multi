@@ -23,6 +23,7 @@ public class GameManager {
     private final LobbyManager lobbyManager;
     private final GameRepository gameRepository;
     private final Gson gson;
+    private EventBus eventBus;
 
     private final Map<String, GameRoom> activeGames   = new ConcurrentHashMap<>();
     private final Map<String, String>   playerGameMap = new ConcurrentHashMap<>();
@@ -38,17 +39,33 @@ public class GameManager {
     }
 
     public void registerEventHandlers(EventBus eventBus) {
-        eventBus.subscribe(EventType.INVITE_ACCEPTED, this::handleGameStart);
+        this.eventBus = eventBus;
+        // Correcao EB-5: GameManager assina MATCH_CONFIRMED apos validacao no LobbyManager
+        eventBus.subscribe(EventType.MATCH_CONFIRMED, this::handleMatchConfirmed);
         eventBus.subscribe(EventType.MOVE_MADE,       this::handleMove);
         eventBus.subscribe(EventType.PLAYER_FORFEIT,  this::handleForfeit);
         eventBus.subscribe(EventType.USER_LOGGED_OUT, this::handleDisconnect);
     }
 
-    private void handleGameStart(GameEvent event) {
-        String accepter = event.getSource();
-        String inviter  = readFrom(event);
+    private void handleMatchConfirmed(GameEvent event) {
+        String inviter = null;
+        String accepter = null;
 
-        if (inviter == null) return;
+        try {
+            JsonObject json = gson.fromJson((String) event.getData(), JsonObject.class);
+            if (json != null) {
+                inviter = json.get("inviter").getAsString();
+                accepter = json.get("accepter").getAsString();
+            }
+        } catch (Exception e) {
+            LOGGER.warning("event=MATCH_CONFIRMED_PARSE_ERROR details=\"Falha ao analisar payload de MATCH_CONFIRMED\"");
+            return;
+        }
+
+        if (inviter == null || accepter == null) {
+            LOGGER.warning("event=MATCH_CONFIRMED_DATA_ERROR details=\"MATCH_CONFIRMED sem inviter ou accepter\"");
+            return;
+        }
 
         GameRoom room = new GameRoom(inviter, accepter);
 
@@ -61,6 +78,10 @@ public class GameManager {
         LOGGER.info(String.format("event=GAME_STARTED details=\"Partida iniciada: %s | %s (X) vs %s (O)\"",
                 room.getGameId(), inviter, accepter));
         notifyGameStarted(room, inviter, accepter);
+
+        if (eventBus != null) {
+            eventBus.publish(new GameEvent(EventType.GAME_STARTED, room.getGameId(), room));
+        }
     }
 
     private void notifyGameStarted(GameRoom room, String inviter, String accepter) {
@@ -91,7 +112,10 @@ public class GameManager {
     private void handleMove(GameEvent event) {
         String username = event.getSource();
         GameRoom room   = getRoomOf(username);
-        if (room == null) { sendErrorTo(username, "Você não está em nenhuma partida"); return; }
+        if (room == null) {
+            sendErrorTo(username, "Você não está em nenhuma partida");
+            return;
+        }
 
         int position;
         try {
@@ -110,7 +134,8 @@ public class GameManager {
         broadcastBoardUpdate(room, username);
 
         if (room.isGameOver()) {
-            broadcastGameOver(room);
+            String reason = (room.getResult() == GameRoom.GameResult.DRAW) ? "DRAW" : "WIN";
+            broadcastGameOver(room, reason);
             cleanupGame(room);
         }
     }
@@ -120,7 +145,7 @@ public class GameManager {
         GameRoom room   = getRoomOf(username);
         if (room == null) return;
         room.forfeit(username);
-        broadcastGameOver(room);
+        broadcastGameOver(room, "FORFEIT");
         cleanupGame(room);
     }
 
@@ -129,7 +154,7 @@ public class GameManager {
         GameRoom room   = getRoomOf(username);
         if (room == null) return;
         room.forfeit(username);
-        broadcastGameOver(room);
+        broadcastGameOver(room, "OPPONENT_DISCONNECTED");
         cleanupGame(room);
     }
 
@@ -144,13 +169,14 @@ public class GameManager {
         sendTo(room.getPlayerO(), msg);
     }
 
-    private void broadcastGameOver(GameRoom room) {
+    private void broadcastGameOver(GameRoom room, String reason) {
         gameRepository.recordGameEnd(room);
 
         JsonObject p = new JsonObject();
         p.addProperty("gameId",  room.getGameId());
         p.addProperty("result",  room.getResult().name());
         p.addProperty("winner",  room.getWinner() != null ? room.getWinner() : "DRAW");
+        p.addProperty("reason",  reason);
         p.add("board", gson.toJsonTree(room.getBoard()));
 
         Message msg = new Message(MessageType.GAME_OVER, SERVER, gson.toJson(p));
@@ -163,6 +189,10 @@ public class GameManager {
         playerGameMap.remove(room.getPlayerX());
         playerGameMap.remove(room.getPlayerO());
         LOGGER.info(String.format("event=GAME_CLOSED details=\"Sala encerrada: %s\"", room.getGameId()));
+
+        if (eventBus != null) {
+            eventBus.publish(new GameEvent(EventType.GAME_OVER, room.getGameId(), room));
+        }
     }
 
     private GameRoom getRoomOf(String username) {
@@ -178,15 +208,6 @@ public class GameManager {
     private void sendErrorTo(String username, String error) {
         ClientHandler h = lobbyManager.getHandler(username);
         if (h != null) h.sendError(error);
-    }
-
-    private String readFrom(GameEvent event) {
-        try {
-            JsonObject json = gson.fromJson((String) event.getData(), JsonObject.class);
-            return json.get("from").getAsString();
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     public int getActiveGameCount() { 

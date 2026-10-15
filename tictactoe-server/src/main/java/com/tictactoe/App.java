@@ -42,7 +42,7 @@ public class App {
         LOGGER.info("event=SERVICES_INITIALIZED details=\"Services inicializados com sucesso\"");
 
         // Servidor WebSocket com timeout e reuseAddr
-        GameServer server = new GameServer(port, eventBus, authService);
+        GameServer server = new GameServer(port, eventBus, authService, lobby);
         server.start();
         LOGGER.info(String.format("event=SERVER_RUNNING details=\"Servidor rodando e pronto para conexoes na porta %d\"", port));
 

@@ -18,14 +18,20 @@ public class GameServer extends WebSocketServer {
 
     private final EventBus eventBus;
     private final AuthService authService;
+    private final com.tictactoe.lobby.LobbyManager lobbyManager;
 
     // Mapa de conexão --> handler do cliente
     private final Map<WebSocket, ClientHandler> clients;
 
     public GameServer(int port, EventBus eventBus, AuthService authService) {
+        this(port, eventBus, authService, null);
+    }
+
+    public GameServer(int port, EventBus eventBus, AuthService authService, com.tictactoe.lobby.LobbyManager lobbyManager) {
         super(new InetSocketAddress(port));
         this.eventBus = eventBus;
         this.authService = authService;
+        this.lobbyManager = lobbyManager;
         this.clients = new ConcurrentHashMap<>();
         setReuseAddr(true);
         setConnectionLostTimeout(10);
@@ -36,7 +42,7 @@ public class GameServer extends WebSocketServer {
         LOGGER.info(String.format("event=WS_CLIENT_CONNECTED details=\"Nova conexao de %s\"",
                 conn != null ? conn.getRemoteSocketAddress() : "desconhecido"));
 
-        ClientHandler handler = new ClientHandler(conn, eventBus, authService);
+        ClientHandler handler = new ClientHandler(conn, eventBus, authService, lobbyManager);
         clients.put(conn, handler);
     }
 
