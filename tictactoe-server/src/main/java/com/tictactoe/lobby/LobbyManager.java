@@ -52,7 +52,7 @@ public class LobbyManager {
             return;
         }
         players.put(username, session);
-        LOGGER.info("[LOBBY] Entrou: " + username + " | Online: " + players.keySet());
+        LOGGER.info(String.format("event=PLAYER_JOINED_LOBBY details=\"Entrou: %s | Online: %s\"", username, players.keySet()));
         broadcastOnlineUsers();
     }
 
@@ -60,7 +60,7 @@ public class LobbyManager {
         if (username == null || !players.remove(username, session)) {
             return;
         }
-        LOGGER.info("[LOBBY] Saiu: " + username + " | Online: " + players.keySet());
+        LOGGER.info(String.format("event=PLAYER_LEFT_LOBBY details=\"Saiu: %s | Online: %s\"", username, players.keySet()));
         broadcastOnlineUsers();
     }
 
@@ -105,7 +105,7 @@ public class LobbyManager {
             return;
         }
 
-        LOGGER.info("[LOBBY] Convite: " + from + " -> " + to);
+        LOGGER.info(String.format("event=INVITE_FORWARDED details=\"Convite enviado de %s para %s\"", from, to));
         forward(to, MessageType.INVITE_RECEIVED, from);
     }
 
@@ -117,7 +117,7 @@ public class LobbyManager {
             return;
         }
 
-        LOGGER.info("[LOBBY] " + responseType + ": " + from + " -> " + to);
+        LOGGER.info(String.format("event=INVITE_RESPONSE_FORWARDED details=\"Resposta %s enviada de %s para %s\"", responseType, from, to));
         forward(to, responseType, from);
     }
 
@@ -133,7 +133,7 @@ public class LobbyManager {
         }
         if (!isOnline(to)) {
             sendErrorTo(from, "Usuário " + to + " não está online");
-            LOGGER.warning("[LOBBY] Destino offline: " + from + " -> " + to);
+            LOGGER.warning(String.format("event=INVITE_TARGET_OFFLINE details=\"Destino offline: %s -> %s\"", from, to));
             return false;
         }
         return true;

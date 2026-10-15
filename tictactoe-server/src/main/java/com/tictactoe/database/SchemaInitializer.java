@@ -17,25 +17,17 @@ public class SchemaInitializer {
     }
 
     public void initialize() {
-        try {
-            Connection conn = database.getConnection();
-            Statement stmt = conn.createStatement();
+        try (Connection conn = database.getConnection();
+             Statement stmt = conn.createStatement()) {
 
             stmt.execute(createUsersTable());
             stmt.execute(createGamesTable());
             stmt.execute(createServerLogsTable());
 
-            stmt.close();
-
-            // Só fecha a conexão se NÃO for in-memory
-            if (!database.isInMemory()) {
-                conn.close();
-            }
-
-            LOGGER.info("Schema inicializado com sucesso");
+            LOGGER.info("event=SCHEMA_INITIALIZED details=\"Schema inicializado com sucesso\"");
 
         } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Falha ao inicializar schema", e);
+            LOGGER.log(Level.SEVERE, "event=SCHEMA_INIT_ERROR details=\"Falha ao inicializar schema\"", e);
             throw new RuntimeException("Não foi possível inicializar o banco de dados", e);
         }
     }
@@ -51,11 +43,11 @@ public class SchemaInitializer {
 
     private String createGamesTable() {
         return "CREATE TABLE IF NOT EXISTS games ("
-                + "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                + "id TEXT PRIMARY KEY, "
                 + "player1 TEXT NOT NULL, "
                 + "player2 TEXT NOT NULL, "
                 + "winner TEXT, "
-                + "result TEXT CHECK(result IN ('PLAYER1_WIN', 'PLAYER2_WIN', 'DRAW', 'FORFEIT')), "
+                + "result TEXT CHECK(result IN ('PLAYER_X_WIN', 'PLAYER_O_WIN', 'DRAW', 'FORFEIT')), "
                 + "board TEXT NOT NULL DEFAULT '---------', "
                 + "status TEXT CHECK(status IN ('WAITING', 'IN_PROGRESS', 'FINISHED')), "
                 + "started_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
@@ -70,7 +62,7 @@ public class SchemaInitializer {
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + "event_type TEXT NOT NULL, "
                 + "username TEXT, "
-                + "game_id INTEGER, "
+                + "game_id TEXT, "
                 + "message TEXT, "
                 + "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
                 + "FOREIGN KEY (username) REFERENCES users(username), "

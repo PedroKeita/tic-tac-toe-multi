@@ -27,11 +27,14 @@ public class GameServer extends WebSocketServer {
         this.eventBus = eventBus;
         this.authService = authService;
         this.clients = new ConcurrentHashMap<>();
+        setReuseAddr(true);
+        setConnectionLostTimeout(10);
     }
 
     @Override
     public void onOpen(WebSocket conn, ClientHandshake handshake) {
-        LOGGER.info("Nova conexão: " + conn.getRemoteSocketAddress());
+        LOGGER.info(String.format("event=WS_CLIENT_CONNECTED details=\"Nova conexao de %s\"",
+                conn != null ? conn.getRemoteSocketAddress() : "desconhecido"));
 
         ClientHandler handler = new ClientHandler(conn, eventBus, authService);
         clients.put(conn, handler);
@@ -42,7 +45,8 @@ public class GameServer extends WebSocketServer {
         ClientHandler handler = clients.get(conn);
 
         if (handler == null) {
-            LOGGER.warning("Mensagem recebida de conexão sem handler: " + conn.getRemoteSocketAddress());
+            LOGGER.warning(String.format("event=WS_MESSAGE_ORPHAN details=\"Mensagem recebida de conexao sem handler: %s\"",
+                    conn != null ? conn.getRemoteSocketAddress() : "desconhecido"));
             return;
         }
 
@@ -51,7 +55,8 @@ public class GameServer extends WebSocketServer {
 
     @Override
     public void onClose(WebSocket conn, int code, String reason, boolean remote) {
-        LOGGER.info("Conexão encerrada: " + conn.getRemoteSocketAddress() + " — " + reason);
+        LOGGER.info(String.format("event=WS_CLIENT_CLOSED details=\"Conexao encerrada: %s (codigo=%d, motivo=%s, remote=%s)\"",
+                conn != null ? conn.getRemoteSocketAddress() : "desconhecido", code, reason, remote));
 
         ClientHandler handler = clients.remove(conn);
         if (handler != null) {
@@ -61,13 +66,13 @@ public class GameServer extends WebSocketServer {
 
     @Override
     public void onError(WebSocket conn, Exception e) {
-        LOGGER.log(Level.SEVERE, "Erro na conexão: " + 
-            (conn != null ? conn.getRemoteSocketAddress() : "desconhecido"), e);
+        LOGGER.log(Level.SEVERE, String.format("event=WS_ERROR details=\"Erro na conexao: %s\"",
+                conn != null ? conn.getRemoteSocketAddress() : "desconhecido"), e);
     }
 
     @Override
     public void onStart() {
-        LOGGER.info("Servidor WebSocket iniciado na porta " + getPort());
+        LOGGER.info(String.format("event=WS_SERVER_STARTED details=\"Servidor WebSocket escutando na porta %d (connectionLostTimeout=10s, reuseAddr=true)\"", getPort()));
     }
 
     public int getClientCount() {

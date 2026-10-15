@@ -1,5 +1,6 @@
 package com.tictactoe.database;
 
+import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -45,7 +46,7 @@ public class Database {
                 try {
                     instance.sharedConnection.close();
                 } catch (SQLException e) {
-                    LOGGER.warning("Erro ao fechar conexão anterior: " + e.getMessage());
+                    LOGGER.warning("event=DB_CONN_CLOSE_WARN details=\"Erro ao fechar conexao anterior: " + e.getMessage() + "\"");
                 }
             }
             instance = new Database(dbUrl);
@@ -56,9 +57,9 @@ public class Database {
     private void initSharedConnection() {
         try {
             sharedConnection = DriverManager.getConnection(dbUrl);
-            LOGGER.info("Conexão compartilhada em memória criada");
+            LOGGER.info("event=DB_SHARED_CONN_READY details=\"Conexao compartilhada em memoria criada\"");
         } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Falha ao criar conexão em memória", e);
+            LOGGER.log(Level.SEVERE, "event=DB_SHARED_CONN_ERROR details=\"Falha ao criar conexao em memoria\"", e);
             throw new RuntimeException("Não foi possível criar conexão em memória", e);
         }
     }
@@ -67,7 +68,7 @@ public class Database {
         try {
             Class.forName("org.sqlite.JDBC");
         } catch (ClassNotFoundException e) {
-            LOGGER.log(Level.SEVERE, "SQLite JDBC Driver não encontrado", e);
+            LOGGER.log(Level.SEVERE, "event=DB_DRIVER_NOT_FOUND details=\"SQLite JDBC Driver nao encontrado\"", e);
             throw new IllegalStateException("SQLite JDBC Driver indisponível", e);
         }
     }
@@ -76,7 +77,19 @@ public class Database {
     // Deve ser fechada pelo chamador (preferencialmente via try-with-resources).
     public Connection getConnection() throws SQLException {
         if (inMemory && sharedConnection != null) {
-            return sharedConnection; 
+            return (Connection) Proxy.newProxyInstance(
+                Connection.class.getClassLoader(),
+                new Class<?>[]{Connection.class},
+                (proxy, method, args) -> {
+                    if ("close".equals(method.getName())) {
+                        return null; // Preserva conexão em memória para testes
+                    }
+                    if ("isClosed".equals(method.getName())) {
+                        return sharedConnection.isClosed();
+                    }
+                    return method.invoke(sharedConnection, args);
+                }
+            );
         }
         return DriverManager.getConnection(dbUrl);
     }

@@ -2,6 +2,7 @@ package com.tictactoe.game;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.tictactoe.database.GameRepository;
 import com.tictactoe.events.EventBus;
 import com.tictactoe.events.EventType;
 import com.tictactoe.events.GameEvent;
@@ -20,13 +21,19 @@ public class GameManager {
     private static final String SERVER = "SERVER";
 
     private final LobbyManager lobbyManager;
+    private final GameRepository gameRepository;
     private final Gson gson;
 
     private final Map<String, GameRoom> activeGames   = new ConcurrentHashMap<>();
     private final Map<String, String>   playerGameMap = new ConcurrentHashMap<>();
 
     public GameManager(LobbyManager lobbyManager) {
+        this(lobbyManager, new GameRepository());
+    }
+
+    public GameManager(LobbyManager lobbyManager, GameRepository gameRepository) {
         this.lobbyManager = lobbyManager;
+        this.gameRepository = gameRepository != null ? gameRepository : new GameRepository();
         this.gson = new Gson();
     }
 
@@ -49,7 +56,10 @@ public class GameManager {
         playerGameMap.put(inviter,  room.getGameId());
         playerGameMap.put(accepter, room.getGameId());
 
-        LOGGER.info("[GAME MANAGER] Partida iniciada: " + room.getGameId());
+        gameRepository.recordGameStart(room);
+
+        LOGGER.info(String.format("event=GAME_STARTED details=\"Partida iniciada: %s | %s (X) vs %s (O)\"",
+                room.getGameId(), inviter, accepter));
         notifyGameStarted(room, inviter, accepter);
     }
 
@@ -135,6 +145,8 @@ public class GameManager {
     }
 
     private void broadcastGameOver(GameRoom room) {
+        gameRepository.recordGameEnd(room);
+
         JsonObject p = new JsonObject();
         p.addProperty("gameId",  room.getGameId());
         p.addProperty("result",  room.getResult().name());
@@ -150,7 +162,7 @@ public class GameManager {
         activeGames.remove(room.getGameId());
         playerGameMap.remove(room.getPlayerX());
         playerGameMap.remove(room.getPlayerO());
-        LOGGER.info("[GAME MANAGER] Sala encerrada: " + room.getGameId());
+        LOGGER.info(String.format("event=GAME_CLOSED details=\"Sala encerrada: %s\"", room.getGameId()));
     }
 
     private GameRoom getRoomOf(String username) {

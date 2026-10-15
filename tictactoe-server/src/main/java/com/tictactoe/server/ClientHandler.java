@@ -43,13 +43,13 @@ public class ClientHandler {
                 return;
             }
 
-            LOGGER.info("Mensagem recebida [" + message.getType() + "] de: " +
-                connection.getRemoteSocketAddress());
+            LOGGER.info(String.format("event=WS_MESSAGE_RECEIVED details=\"Mensagem recebida [%s] de: %s\"",
+                message.getType(), connection.getRemoteSocketAddress()));
 
             route(message);
 
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Erro ao processar mensagem", e);
+            LOGGER.log(Level.SEVERE, "event=WS_MESSAGE_PROCESS_ERROR details=\"Erro ao processar mensagem\"", e);
             sendError("Erro interno ao processar mensagem");
         }
     }
@@ -156,8 +156,8 @@ public class ClientHandler {
             eventBus.publish(new GameEvent(
                 EventType.USER_LOGGED_OUT, username, this));
         }
-        LOGGER.info("Cliente desconectado: " + 
-            (username != null ? username : connection.getRemoteSocketAddress()));
+        LOGGER.info(String.format("event=CLIENT_DISCONNECTED details=\"Cliente desconectado: %s\"",
+            (username != null ? username : connection.getRemoteSocketAddress())));
     }
 
     public void send(Message message) {

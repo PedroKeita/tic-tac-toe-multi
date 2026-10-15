@@ -1,29 +1,37 @@
-const WS_URL = 'ws://localhost:8080';
+const WS_URL = import.meta.env.VITE_WS_URL ?? `ws://${window.location.hostname}:8080`;
 
 class GameWebSocket {
   constructor() {
     this.ws = null;
     this.listeners = new Map();
     this.connected = false;
+    this._connectPromise = null;
     this._reconnectTimer = null;
   }
 
   connect() {
-    return new Promise((resolve, reject) => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        resolve();
-        return;
-      }
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      return Promise.resolve();
+    }
 
-      this.ws = new WebSocket(WS_URL);
+    if (this.ws && this.ws.readyState === WebSocket.CONNECTING && this._connectPromise) {
+      return this._connectPromise;
+    }
 
-      this.ws.onopen = () => {
+    this._connectPromise = new Promise((resolve, reject) => {
+      let isSettled = false;
+      const ws = new WebSocket(WS_URL);
+      this.ws = ws;
+
+      ws.onopen = () => {
+        isSettled = true;
         this.connected = true;
+        this._connectPromise = null;
         this._notify('_connected');
         resolve();
       };
 
-      this.ws.onmessage = (event) => {
+      ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
           this._notify(message.type, message);
@@ -32,16 +40,27 @@ class GameWebSocket {
         }
       };
 
-      this.ws.onclose = () => {
+      ws.onclose = (event) => {
         this.connected = false;
+        this._connectPromise = null;
         this._notify('_disconnected');
+        if (!isSettled) {
+          isSettled = true;
+          reject(new Error(`WebSocket fechado antes de abrir (codigo: ${event.code})`));
+        }
       };
 
-      this.ws.onerror = (err) => {
+      ws.onerror = (err) => {
         console.error('[WS] Error:', err);
-        if (!this.connected) reject(err);
+        if (!isSettled) {
+          isSettled = true;
+          this._connectPromise = null;
+          reject(err);
+        }
       };
     });
+
+    return this._connectPromise;
   }
 
   send(type, payloadObj = {}) {
@@ -88,6 +107,7 @@ class GameWebSocket {
       this.ws.close();
       this.ws = null;
       this.connected = false;
+      this._connectPromise = null;
     }
   }
 
