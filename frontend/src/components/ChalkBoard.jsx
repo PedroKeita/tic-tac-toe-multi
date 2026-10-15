@@ -7,6 +7,7 @@ export default function ChalkBoard({
   disabled = false,
   isGameOver = false,
   gameResult = null, // 'win' | 'draw' | 'defeat'
+  reason = null,     // 'WIN' | 'DRAW' | 'FORFEIT' | 'OPPONENT_DISCONNECTED'
   onPlayAgain,
   onExit,
   children,
@@ -44,6 +45,7 @@ export default function ChalkBoard({
             ) : isGameOver && gameResult ? (
               <GameResultOverlay
                 status={gameResult}
+                reason={reason}
                 onPlayAgain={onPlayAgain}
                 onExit={onExit}
               />

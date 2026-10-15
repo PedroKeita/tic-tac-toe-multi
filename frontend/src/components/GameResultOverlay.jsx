@@ -71,9 +71,47 @@ function SadFaceBadge() {
 
 export default function GameResultOverlay({
   status = 'win', // 'win', 'draw', 'defeat'
+  reason = null,  // 'WIN' | 'DRAW' | 'FORFEIT' | 'OPPONENT_DISCONNECTED'
   onPlayAgain,
   onExit,
 }) {
+  const renderWinMessage = () => {
+    if (reason === 'FORFEIT') {
+      return (
+        <>
+          Adversário desistiu<br />Você venceu!
+        </>
+      );
+    }
+    if (reason === 'OPPONENT_DISCONNECTED') {
+      return (
+        <>
+          Adversário desconectou<br />Vitória concedida!
+        </>
+      );
+    }
+    return (
+      <>
+        Você ganhou<br />Parabéns!!!
+      </>
+    );
+  };
+
+  const renderDefeatMessage = () => {
+    if (reason === 'FORFEIT') {
+      return (
+        <>
+          Você abandonou<br />a partida.
+        </>
+      );
+    }
+    return (
+      <>
+        Viiiiiix!<br />Você perdeu.
+      </>
+    );
+  };
+
   return (
     <div className="w-full h-full flex flex-row items-center justify-around px-4 py-6 md:px-8 select-none animate-fadeIn">
       {/* COLUNA ESQUERDA: Mensagem e Ilustração */}
@@ -85,7 +123,7 @@ export default function GameResultOverlay({
               <div className="w-14 h-[1.5px] bg-white/70 mb-2" />
             </div>
             <div className="font-pixel text-[#00e5ff] text-[11px] sm:text-xs leading-relaxed tracking-wider drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-              Você ganhou<br />Parabéns!!!
+              {renderWinMessage()}
             </div>
             <TrophyBadge />
           </>
@@ -103,7 +141,7 @@ export default function GameResultOverlay({
         {status === 'defeat' && (
           <>
             <div className="font-pixel text-[#ff4d2e] text-[11px] sm:text-xs leading-relaxed tracking-wider drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-              Viiiiiix!<br />Você perdeu.
+              {renderDefeatMessage()}
             </div>
             <SadFaceBadge />
           </>

@@ -1,31 +1,31 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { gameSocket } from '../services/websocket';
+import { safeParsePayload } from '../utils/safeJson';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('ttt_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(localStorage.getItem('ttt_user')));
+  // Sessão em memória para evitar sessões fantasmas após F5 (quando o socket novo não está autenticado)
+  const [user, setUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Limpa resquícios de localStorage ao inicializar e escuta desconexão do socket
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('ttt_user', JSON.stringify(user));
-      setIsAuthenticated(true);
-    } else {
-      localStorage.removeItem('ttt_user');
+    localStorage.removeItem('ttt_user');
+
+    const handleDisconnect = () => {
+      setUser(null);
       setIsAuthenticated(false);
-    }
-  }, [user]);
+      localStorage.removeItem('ttt_user');
+    };
+
+    gameSocket.on('_disconnected', handleDisconnect);
+    return () => {
+      gameSocket.off('_disconnected', handleDisconnect);
+    };
+  }, []);
 
   const ensureConnected = useCallback(async () => {
     if (!gameSocket.isConnected()) {
@@ -41,38 +41,62 @@ export function AuthProvider({ children }) {
       await ensureConnected();
     } catch {
       setIsLoading(false);
-      const err = 'Nao foi possivel conectar ao servidor.';
+      const err = 'Não foi possível conectar ao servidor.';
       setError(err);
       throw new Error(err);
     }
 
     return new Promise((resolve, reject) => {
+      let timer = null;
+
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        gameSocket.off('LOGIN_SUCCESS', onSuccess);
+        gameSocket.off('LOGIN_ERROR', onError);
+        gameSocket.off('ERROR', onGeneralError);
+      };
+
       const onSuccess = (msg) => {
         cleanup();
         setIsLoading(false);
-        const payload = JSON.parse(msg.payload);
-        const userData = { username: payload.username, token: payload.token };
+        const payload = safeParsePayload(msg.payload, {});
+        const userData = { username: payload.username || username.trim(), token: payload.token };
         setUser(userData);
+        setIsAuthenticated(true);
         resolve(userData);
       };
 
       const onError = (msg) => {
         cleanup();
         setIsLoading(false);
-        const payload = JSON.parse(msg.payload);
+        const payload = safeParsePayload(msg.payload, {});
         const errMsg = payload.message || 'Falha no login.';
         setError(errMsg);
         reject(new Error(errMsg));
       };
 
-      const cleanup = () => {
-        gameSocket.off('LOGIN_SUCCESS', onSuccess);
-        gameSocket.off('LOGIN_ERROR', onError);
+      const onGeneralError = (msg) => {
+        cleanup();
+        setIsLoading(false);
+        const payload = safeParsePayload(msg.payload, {});
+        const errMsg = payload.message || 'Erro interno no servidor.';
+        setError(errMsg);
+        reject(new Error(errMsg));
       };
+
+      // Timeout de 5s para evitar spinner travado
+      timer = setTimeout(() => {
+        cleanup();
+        setIsLoading(false);
+        const errMsg = 'Tempo de resposta do servidor esgotado. Tente novamente.';
+        setError(errMsg);
+        reject(new Error(errMsg));
+      }, 5000);
 
       gameSocket.on('LOGIN_SUCCESS', onSuccess);
       gameSocket.on('LOGIN_ERROR', onError);
-      gameSocket.send('LOGIN', { username, password });
+      gameSocket.on('ERROR', onGeneralError);
+      gameSocket.send('LOGIN', { username: username.trim(), password });
     });
   }, [ensureConnected]);
 
@@ -82,16 +106,16 @@ export function AuthProvider({ children }) {
 
     const { username, password, confirmPassword } = userData;
 
-    if (!username || !password) {
+    if (!username || !username.trim() || !password) {
       setIsLoading(false);
-      const err = 'Username e senha sao obrigatorios.';
+      const err = 'Username e senha são obrigatórios.';
       setError(err);
       throw new Error(err);
     }
 
     if (confirmPassword && password !== confirmPassword) {
       setIsLoading(false);
-      const err = 'As senhas nao coincidem.';
+      const err = 'As senhas não coincidem.';
       setError(err);
       throw new Error(err);
     }
@@ -100,42 +124,67 @@ export function AuthProvider({ children }) {
       await ensureConnected();
     } catch {
       setIsLoading(false);
-      const err = 'Nao foi possivel conectar ao servidor.';
+      const err = 'Não foi possível conectar ao servidor.';
       setError(err);
       throw new Error(err);
     }
 
     return new Promise((resolve, reject) => {
+      let timer = null;
+
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        gameSocket.off('REGISTER_SUCCESS', onSuccess);
+        gameSocket.off('REGISTER_ERROR', onError);
+        gameSocket.off('ERROR', onGeneralError);
+      };
+
       const onSuccess = (msg) => {
         cleanup();
         setIsLoading(false);
-        const payload = JSON.parse(msg.payload);
-        const registeredUser = { username: payload.username };
+        const payload = safeParsePayload(msg.payload, {});
+        const registeredUser = { username: payload.username || username.trim() };
         resolve(registeredUser);
       };
 
       const onError = (msg) => {
         cleanup();
         setIsLoading(false);
-        const payload = JSON.parse(msg.payload);
+        const payload = safeParsePayload(msg.payload, {});
         const errMsg = payload.message || 'Falha no registro.';
         setError(errMsg);
         reject(new Error(errMsg));
       };
 
-      const cleanup = () => {
-        gameSocket.off('REGISTER_SUCCESS', onSuccess);
-        gameSocket.off('REGISTER_ERROR', onError);
+      const onGeneralError = (msg) => {
+        cleanup();
+        setIsLoading(false);
+        const payload = safeParsePayload(msg.payload, {});
+        const errMsg = payload.message || 'Erro interno no servidor.';
+        setError(errMsg);
+        reject(new Error(errMsg));
       };
+
+      // Timeout de 5s para evitar spinner travado
+      timer = setTimeout(() => {
+        cleanup();
+        setIsLoading(false);
+        const errMsg = 'Tempo de resposta do servidor esgotado. Tente novamente.';
+        setError(errMsg);
+        reject(new Error(errMsg));
+      }, 5000);
 
       gameSocket.on('REGISTER_SUCCESS', onSuccess);
       gameSocket.on('REGISTER_ERROR', onError);
-      gameSocket.send('REGISTER', { username, password });
+      gameSocket.on('ERROR', onGeneralError);
+      gameSocket.send('REGISTER', { username: username.trim(), password });
     });
   }, [ensureConnected]);
 
   const logout = useCallback(() => {
-    gameSocket.send('DISCONNECT', {});
+    try {
+      gameSocket.send('DISCONNECT', {});
+    } catch {}
     gameSocket.disconnect();
     setUser(null);
     setIsAuthenticated(false);

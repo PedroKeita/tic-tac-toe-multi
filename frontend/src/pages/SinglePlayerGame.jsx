@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/Card';
@@ -197,10 +197,10 @@ export default function SinglePlayerGame() {
 
         {/* Área Central do Jogo: Jogador - Quadro de Giz - Bot */}
         <div className="w-full flex flex-row items-center justify-center gap-4 sm:gap-6 md:gap-8 lg:gap-10 my-auto px-2">
-          {/* Card Esquerdo: Jogador Humano (sempre 'You' como no Figma) */}
+          {/* Card Esquerdo: Jogador Humano */}
           <PlayerGameCard
             type="player"
-            name="You"
+            name={user?.username || 'You'}
             symbol="O"
             isTurn={turn === 'O' && !isGameOver}
             isThinking={false}
