@@ -6,6 +6,7 @@ import com.tictactoe.auth.AuthService;
 import com.tictactoe.events.EventBus;
 import com.tictactoe.events.EventType;
 import com.tictactoe.events.GameEvent;
+import com.tictactoe.lobby.LobbyManager;
 import com.tictactoe.shared.Message;
 import com.tictactoe.shared.MessageType;
 import org.java_websocket.WebSocket;
@@ -20,16 +21,22 @@ public class ClientHandler {
     private final WebSocket connection;
     private final EventBus eventBus;
     private final AuthService authService;
+    private final LobbyManager lobbyManager;
     private final Gson gson;
 
     // Estado do cliente
-    private String username;
-    private boolean authenticated;
+    private volatile String username;
+    private volatile boolean authenticated;
 
     public ClientHandler(WebSocket connection, EventBus eventBus, AuthService authService) {
+        this(connection, eventBus, authService, null);
+    }
+
+    public ClientHandler(WebSocket connection, EventBus eventBus, AuthService authService, LobbyManager lobbyManager) {
         this.connection = connection;
         this.eventBus = eventBus;
         this.authService = authService;
+        this.lobbyManager = lobbyManager;
         this.gson = new Gson();
         this.authenticated = false;
     }
@@ -43,13 +50,13 @@ public class ClientHandler {
                 return;
             }
 
-            LOGGER.info("Mensagem recebida [" + message.getType() + "] de: " +
-                connection.getRemoteSocketAddress());
+            LOGGER.info(String.format("event=WS_MESSAGE_RECEIVED details=\"Mensagem recebida [%s] de: %s\"",
+                message.getType(), connection.getRemoteSocketAddress()));
 
             route(message);
 
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Erro ao processar mensagem", e);
+            LOGGER.log(Level.SEVERE, "event=WS_MESSAGE_PROCESS_ERROR details=\"Erro ao processar mensagem\"", e);
             sendError("Erro interno ao processar mensagem");
         }
     }
@@ -63,12 +70,12 @@ public class ClientHandler {
                 handleLogin(message);
                 break;
             case DISCONNECT:
-                onDisconnect();
+                handleDisconnectCommand();
                 break;
             default:
-                // Rotas autenticadas
+                // Rotas autenticadas (RNF02.3)
                 if (!authenticated) {
-                    sendError("Não autenticado");
+                    sendError("Acesso não autorizado. Faça login primeiro.");
                     return;
                 }
                 handleAuthenticatedMessage(message);
@@ -78,86 +85,155 @@ public class ClientHandler {
     private void handleAuthenticatedMessage(Message message) {
         switch (message.getType()) {
             case LIST_ONLINE_USERS:
-
                 eventBus.publish(new GameEvent(
                     EventType.LIST_ONLINE_USERS, username, null));
-
                 break;
 
             case INVITE:
-
                 eventBus.publish(new GameEvent(
                     EventType.INVITE_SENT, username, message.getPayload()));
-
                 break;
 
             case INVITE_ACCEPTED:
-
                 eventBus.publish(new GameEvent(
                     EventType.INVITE_ACCEPTED, username, message.getPayload()));
-
                 break;
 
             case INVITE_REJECTED:
-
                 eventBus.publish(new GameEvent(
                     EventType.INVITE_REJECTED, username, message.getPayload()));
-
                 break;
 
             case MAKE_MOVE:
-
                 eventBus.publish(new GameEvent(
                     EventType.MOVE_MADE, username, message.getPayload()));
-
                 break;
 
             case FORFEIT:
-
                 eventBus.publish(new GameEvent(
                     EventType.PLAYER_FORFEIT, username, message.getPayload()));
-
                 break;
-                
+
+            case REMATCH_REQUEST:
+                eventBus.publish(new GameEvent(
+                    EventType.REMATCH_REQUEST, username, message.getPayload()));
+                break;
+
+            case REMATCH_DECLINED:
+                eventBus.publish(new GameEvent(
+                    EventType.REMATCH_DECLINED, username, message.getPayload()));
+                break;
+
             default:
                 sendError("Tipo de mensagem desconhecido: " + message.getType());
         }
     }
 
     private void handleRegister(Message message) {
-        JsonObject payload = gson.fromJson(message.getPayload(), JsonObject.class);
-        String username = payload.get("username").getAsString();
-        String password = payload.get("password").getAsString();
+        String payloadStr = message.getPayload();
+        if (payloadStr == null || payloadStr.trim().isEmpty()) {
+            sendAuthError(MessageType.REGISTER_ERROR, "Payload de registro não fornecido");
+            return;
+        }
 
-        Message response = authService.register(username, password);
+        JsonObject payload;
+        try {
+            payload = gson.fromJson(payloadStr, JsonObject.class);
+        } catch (Exception e) {
+            sendAuthError(MessageType.REGISTER_ERROR, "Payload JSON inválido");
+            return;
+        }
+
+        if (payload == null || !payload.has("username") || payload.get("username").isJsonNull()
+                || !payload.has("password") || payload.get("password").isJsonNull()) {
+            sendAuthError(MessageType.REGISTER_ERROR, "Campos 'username' e 'password' são obrigatórios");
+            return;
+        }
+
+        String rawUsername = payload.get("username").getAsString();
+        String rawPassword = payload.get("password").getAsString();
+
+        if (rawUsername.trim().isEmpty() || rawPassword.trim().isEmpty()) {
+            sendAuthError(MessageType.REGISTER_ERROR, "Username e password não podem ser vazios");
+            return;
+        }
+
+        Message response = authService.register(rawUsername.trim(), rawPassword);
         send(response);
     }
 
     private void handleLogin(Message message) {
-        JsonObject payload = gson.fromJson(message.getPayload(), JsonObject.class);
-        String username = payload.get("username").getAsString();
-        String password = payload.get("password").getAsString();
+        if (authenticated) {
+            sendAuthError(MessageType.LOGIN_ERROR, "Usuário já está autenticado nesta sessão");
+            return;
+        }
 
-        Message response = authService.login(username, password);
+        String payloadStr = message.getPayload();
+        if (payloadStr == null || payloadStr.trim().isEmpty()) {
+            sendAuthError(MessageType.LOGIN_ERROR, "Payload de login não fornecido");
+            return;
+        }
+
+        JsonObject payload;
+        try {
+            payload = gson.fromJson(payloadStr, JsonObject.class);
+        } catch (Exception e) {
+            sendAuthError(MessageType.LOGIN_ERROR, "Payload JSON inválido");
+            return;
+        }
+
+        if (payload == null || !payload.has("username") || payload.get("username").isJsonNull()
+                || !payload.has("password") || payload.get("password").isJsonNull()) {
+            sendAuthError(MessageType.LOGIN_ERROR, "Campos 'username' e 'password' são obrigatórios");
+            return;
+        }
+
+        String rawUsername = payload.get("username").getAsString();
+        String rawPassword = payload.get("password").getAsString();
+
+        if (rawUsername.trim().isEmpty() || rawPassword.trim().isEmpty()) {
+            sendAuthError(MessageType.LOGIN_ERROR, "Username e password não podem ser vazios");
+            return;
+        }
+
+        String normalizedUsername = rawUsername.trim();
+
+        if (lobbyManager != null && lobbyManager.isOnline(normalizedUsername)) {
+            LOGGER.warning(String.format("event=LOGIN_REJECTED_ONLINE details=\"Tentativa de login recusada - usuario ja esta online: %s\"", normalizedUsername));
+            sendAuthError(MessageType.LOGIN_ERROR, "Usuário já está online");
+            return;
+        }
+
+        Message response = authService.login(normalizedUsername, rawPassword);
 
         if (response.getType() == MessageType.LOGIN_SUCCESS) {
-            this.username = username;
+            this.username = normalizedUsername;
             this.authenticated = true;
 
             eventBus.publish(new GameEvent(
-                EventType.USER_LOGGED_IN, username, this));
+                EventType.USER_LOGGED_IN, normalizedUsername, this));
         }
 
         send(response);
     }
 
+    private void handleDisconnectCommand() {
+        onDisconnect();
+        if (connection != null && connection.isOpen()) {
+            connection.close();
+        }
+    }
+
     public void onDisconnect() {
         if (authenticated && username != null) {
+            String user = this.username;
+            this.authenticated = false;
+            this.username = null;
+
             eventBus.publish(new GameEvent(
-                EventType.USER_LOGGED_OUT, username, this));
+                EventType.USER_LOGGED_OUT, user, this));
+            LOGGER.info(String.format("event=CLIENT_DISCONNECTED details=\"Cliente desconectado: %s\"", user));
         }
-        LOGGER.info("Cliente desconectado: " + 
-            (username != null ? username : connection.getRemoteSocketAddress()));
     }
 
     public void send(Message message) {
@@ -172,6 +248,12 @@ public class ClientHandler {
         send(new Message(MessageType.ERROR, "SERVER", gson.toJson(payload)));
     }
 
+    private void sendAuthError(MessageType errorType, String errorMessage) {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("message", errorMessage);
+        send(new Message(errorType, "SERVER", gson.toJson(payload)));
+    }
+
     // Getters
     public String getUsername() { 
         return username; 
@@ -184,5 +266,4 @@ public class ClientHandler {
     public WebSocket getConnection() { 
         return connection; 
     }
-
 }

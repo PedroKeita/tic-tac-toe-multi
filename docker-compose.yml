@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./tictactoe-server
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - JAVA_OPTS=-Xmx512m
+    networks:
+      - tictactoe-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_WS_URL=ws://localhost:8080
+    depends_on:
+      - backend
+    networks:
+      - tictactoe-network
+
+volumes:
+  data:
+
+networks:
+  tictactoe-network:
+    driver: bridge

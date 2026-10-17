@@ -27,6 +27,11 @@ public enum MessageType {
     GAME_OVER,
     FORFEIT,
 
+    // Rematch
+    REMATCH_REQUEST,
+    REMATCH_WAITING,
+    REMATCH_DECLINED,
+
     // System
     ERROR,
     DISCONNECT

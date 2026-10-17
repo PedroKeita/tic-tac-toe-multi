@@ -3,6 +3,7 @@ package com.tictactoe.auth;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.tictactoe.database.Database;
+import com.tictactoe.database.GameRepository;
 import com.tictactoe.shared.Message;
 import com.tictactoe.shared.MessageType;
 import com.tictactoe.shared.interfaces.IAuthService;
@@ -22,6 +23,7 @@ public class AuthService implements IAuthService {
     private static final int SQLITE_CONSTRAINT_ERROR_CODE = 19;
 
     private final Database database;
+    private final GameRepository gameRepository;
     private final Gson gson;
 
     public AuthService() {
@@ -30,6 +32,7 @@ public class AuthService implements IAuthService {
 
     public AuthService(Database database) {
         this.database = database != null ? database : Database.getInstance();
+        this.gameRepository = new GameRepository(this.database);
         this.gson = new Gson();
     }
 
@@ -54,7 +57,8 @@ public class AuthService implements IAuthService {
             stmt.setString(2, passwordHash);
             stmt.executeUpdate();
 
-            LOGGER.info("Usuário registrado com sucesso: " + trimmedUsername);
+            LOGGER.info(String.format("event=USER_REGISTERED details=\"Usuario registrado com sucesso: %s\"", trimmedUsername));
+            gameRepository.logEvent("REGISTER_SUCCESS", trimmedUsername, null, "Usuario registrado com sucesso");
 
             JsonObject payload = new JsonObject();
             payload.addProperty("username", trimmedUsername);
@@ -64,10 +68,10 @@ public class AuthService implements IAuthService {
 
         } catch (SQLException e) {
             if (isDuplicateConstraintViolation(e)) {
-                LOGGER.warning("Registro recusado - username duplicado: " + trimmedUsername);
+                LOGGER.warning(String.format("event=REGISTER_DUPLICATE details=\"Registro recusado - username duplicado: %s\"", trimmedUsername));
                 return createErrorResponse(MessageType.REGISTER_ERROR, "Username already exists");
             }
-            LOGGER.log(Level.SEVERE, "Erro inesperado ao registrar usuário: " + trimmedUsername, e);
+            LOGGER.log(Level.SEVERE, String.format("event=REGISTER_DB_ERROR details=\"Erro inesperado ao registrar usuario: %s\"", trimmedUsername), e);
             return createErrorResponse(MessageType.REGISTER_ERROR, "Database error during registration");
         } finally {
             closeQuietly(stmt);
@@ -96,19 +100,22 @@ public class AuthService implements IAuthService {
             rs = stmt.executeQuery();
 
             if (!rs.next()) {
-                LOGGER.warning("Login falhou - usuário inexistente: " + trimmedUsername);
+                LOGGER.warning(String.format("event=LOGIN_FAILED details=\"Login falhou - usuario inexistente: %s\"", trimmedUsername));
+                gameRepository.logEvent("LOGIN_FAILED", trimmedUsername, null, "Tentativa de login para usuario inexistente");
                 return createErrorResponse(MessageType.LOGIN_ERROR, "Invalid username or password");
             }
 
             String storedPasswordHash = rs.getString("password_hash");
 
             if (!PasswordUtils.verifyPassword(password, storedPasswordHash)) {
-                LOGGER.warning("Login falhou - senha incorreta para: " + trimmedUsername);
+                LOGGER.warning(String.format("event=LOGIN_FAILED details=\"Login falhou - senha incorreta para: %s\"", trimmedUsername));
+                gameRepository.logEvent("LOGIN_FAILED", trimmedUsername, null, "Tentativa de login com senha incorreta");
                 return createErrorResponse(MessageType.LOGIN_ERROR, "Invalid username or password");
             }
 
             String sessionToken = UUID.randomUUID().toString();
-            LOGGER.info("Usuário autenticado com sucesso: " + trimmedUsername);
+            LOGGER.info(String.format("event=LOGIN_SUCCESS details=\"Usuario autenticado com sucesso: %s\"", trimmedUsername));
+            gameRepository.logEvent("LOGIN_SUCCESS", trimmedUsername, null, "Login realizado com sucesso");
 
             JsonObject payload = new JsonObject();
             payload.addProperty("username", trimmedUsername);
@@ -117,7 +124,8 @@ public class AuthService implements IAuthService {
             return new Message(MessageType.LOGIN_SUCCESS, SERVER_SENDER, gson.toJson(payload));
 
         } catch (SQLException e) {
-            LOGGER.log(Level.SEVERE, "Erro de banco de dados durante o login: " + trimmedUsername, e);
+            LOGGER.log(Level.SEVERE, String.format("event=LOGIN_DB_ERROR details=\"Erro de banco durante login: %s\"", trimmedUsername), e);
+            gameRepository.logEvent("LOGIN_ERROR", trimmedUsername, null, "Erro de banco de dados durante login");
             return createErrorResponse(MessageType.LOGIN_ERROR, "Database error during login");
         } finally {
             closeQuietly(rs);

@@ -58,9 +58,6 @@ export default function Login() {
         <HeaderBar title="LOGIN" />
 
         <form onSubmit={handleSubmit} className="w-full max-w-sm flex flex-col items-center space-y-4 my-auto">
-          <div className="w-full text-left">
-            <span className="text-xs font-semibold text-neutral-400">Frame</span>
-          </div>
 
           <div className="w-full">
             <Input
