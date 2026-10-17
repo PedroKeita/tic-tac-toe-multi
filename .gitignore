@@ -6,3 +6,15 @@
 # Maven generated files
 target/
 dependency-reduced-pom.xml
+
+# Docker
+data/
+*.log
+
+# Node
+frontend/node_modules
+frontend/dist
+
+# Env
+.env
+.env.local
