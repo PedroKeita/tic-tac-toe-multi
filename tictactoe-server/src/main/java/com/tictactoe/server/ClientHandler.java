@@ -114,6 +114,16 @@ public class ClientHandler {
                     EventType.PLAYER_FORFEIT, username, message.getPayload()));
                 break;
 
+            case REMATCH_REQUEST:
+                eventBus.publish(new GameEvent(
+                    EventType.REMATCH_REQUEST, username, message.getPayload()));
+                break;
+
+            case REMATCH_DECLINED:
+                eventBus.publish(new GameEvent(
+                    EventType.REMATCH_DECLINED, username, message.getPayload()));
+                break;
+
             default:
                 sendError("Tipo de mensagem desconhecido: " + message.getType());
         }

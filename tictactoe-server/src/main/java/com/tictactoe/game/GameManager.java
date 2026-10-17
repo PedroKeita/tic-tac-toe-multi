@@ -12,6 +12,7 @@ import com.tictactoe.shared.Message;
 import com.tictactoe.shared.MessageType;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
@@ -27,6 +28,8 @@ public class GameManager {
 
     private final Map<String, GameRoom> activeGames   = new ConcurrentHashMap<>();
     private final Map<String, String>   playerGameMap = new ConcurrentHashMap<>();
+    private final Map<String, String>   rematchPairs  = new ConcurrentHashMap<>();
+    private final Set<String>           rematchVotes  = ConcurrentHashMap.newKeySet();
 
     public GameManager(LobbyManager lobbyManager) {
         this(lobbyManager, new GameRepository());
@@ -42,9 +45,11 @@ public class GameManager {
         this.eventBus = eventBus;
         // Correcao EB-5: GameManager assina MATCH_CONFIRMED apos validacao no LobbyManager
         eventBus.subscribe(EventType.MATCH_CONFIRMED, this::handleMatchConfirmed);
-        eventBus.subscribe(EventType.MOVE_MADE,       this::handleMove);
+        eventBus.subscribe(EventType.MOVE_MADE,        this::handleMove);
         eventBus.subscribe(EventType.PLAYER_FORFEIT,  this::handleForfeit);
         eventBus.subscribe(EventType.USER_LOGGED_OUT, this::handleDisconnect);
+        eventBus.subscribe(EventType.REMATCH_REQUEST,  this::handleRematchRequest);
+        eventBus.subscribe(EventType.REMATCH_DECLINED, this::handleRematchDeclined);
     }
 
     private void handleMatchConfirmed(GameEvent event) {
@@ -151,7 +156,15 @@ public class GameManager {
 
     private void handleDisconnect(GameEvent event) {
         String username = event.getSource();
-        GameRoom room   = getRoomOf(username);
+
+        String rematchOpponent = rematchPairs.get(username);
+        if (rematchOpponent != null) {
+            rematchVotes.remove(username);
+            rematchVotes.remove(rematchOpponent);
+            clearRematch(username, rematchOpponent);
+        }
+
+        GameRoom room = getRoomOf(username);
         if (room == null) return;
         room.forfeit(username);
         broadcastGameOver(room, "OPPONENT_DISCONNECTED");
@@ -188,11 +201,94 @@ public class GameManager {
         activeGames.remove(room.getGameId());
         playerGameMap.remove(room.getPlayerX());
         playerGameMap.remove(room.getPlayerO());
+
+        rematchPairs.put(room.getPlayerX(), room.getPlayerO());
+        rematchPairs.put(room.getPlayerO(), room.getPlayerX());
+
         LOGGER.info(String.format("event=GAME_CLOSED details=\"Sala encerrada: %s\"", room.getGameId()));
 
         if (eventBus != null) {
             eventBus.publish(new GameEvent(EventType.GAME_OVER, room.getGameId(), room));
         }
+    }
+
+    private void handleRematchRequest(GameEvent event) {
+        String username = event.getSource();
+        String opponent = rematchPairs.get(username);
+
+        if (opponent == null || !rematchPairs.containsKey(opponent)) {
+            sendErrorTo(username, "Não há revanche disponível");
+            return;
+        }
+
+        if (!lobbyManager.isOnline(opponent)) {
+            clearRematch(username, opponent);
+            sendErrorTo(username, "Oponente não está mais online");
+            return;
+        }
+
+        rematchVotes.add(username);
+
+        if (rematchVotes.contains(opponent)) {
+            rematchVotes.remove(username);
+            rematchVotes.remove(opponent);
+            clearRematch(username, opponent);
+
+            lobbyManager.setPlayerStatus(username, com.tictactoe.lobby.LobbyManager.PlayerStatus.IN_GAME);
+            lobbyManager.setPlayerStatus(opponent, com.tictactoe.lobby.LobbyManager.PlayerStatus.IN_GAME);
+            lobbyManager.broadcastOnlineUsers();
+
+            GameRoom room = new GameRoom(opponent, username);
+            activeGames.put(room.getGameId(), room);
+            playerGameMap.put(opponent, room.getGameId());
+            playerGameMap.put(username, room.getGameId());
+            gameRepository.recordGameStart(room);
+
+            LOGGER.info(String.format("event=REMATCH_STARTED details=\"Revanche: %s | %s (X) vs %s (O)\"",
+                    room.getGameId(), opponent, username));
+            notifyGameStarted(room, opponent, username);
+
+            if (eventBus != null) {
+                eventBus.publish(new GameEvent(EventType.GAME_STARTED, room.getGameId(), room));
+            }
+        } else {
+            JsonObject p = new JsonObject();
+            p.addProperty("from", username);
+            ClientHandler opponentH = lobbyManager.getHandler(opponent);
+            if (opponentH != null) {
+                opponentH.send(new Message(MessageType.REMATCH_WAITING, SERVER, gson.toJson(p)));
+            }
+
+            ClientHandler selfH = lobbyManager.getHandler(username);
+            if (selfH != null) {
+                JsonObject ack = new JsonObject();
+                ack.addProperty("message", "Aguardando oponente aceitar revanche...");
+                selfH.send(new Message(MessageType.REMATCH_WAITING, SERVER, gson.toJson(ack)));
+            }
+        }
+    }
+
+    private void handleRematchDeclined(GameEvent event) {
+        String username = event.getSource();
+        String opponent = rematchPairs.get(username);
+
+        if (opponent != null) {
+            rematchVotes.remove(username);
+            rematchVotes.remove(opponent);
+            clearRematch(username, opponent);
+
+            ClientHandler opponentH = lobbyManager.getHandler(opponent);
+            if (opponentH != null) {
+                JsonObject p = new JsonObject();
+                p.addProperty("from", username);
+                opponentH.send(new Message(MessageType.REMATCH_DECLINED, SERVER, gson.toJson(p)));
+            }
+        }
+    }
+
+    private void clearRematch(String a, String b) {
+        rematchPairs.remove(a);
+        rematchPairs.remove(b);
     }
 
     private GameRoom getRoomOf(String username) {
