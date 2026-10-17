@@ -213,6 +213,7 @@ export default function SinglePlayerGame() {
             disabled={turn === 'X' || isBotThinking || isGameOver}
             isGameOver={isGameOver}
             gameResult={gameResult}
+            playerSymbol="O"
             onPlayAgain={resetGame}
             onExit={handleExit}
           />

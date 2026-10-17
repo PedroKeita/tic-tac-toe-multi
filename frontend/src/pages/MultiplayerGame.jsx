@@ -36,8 +36,9 @@ export default function MultiplayerGame() {
   const [gameReason, setGameReason] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  // Ref para capturar estado atual de isGameOver no cleanup de desmontagem
+  // Refs para controle de desmontagem
   const isGameOverRef = useRef(false);
+  const activatedRef = useRef(false);
   useEffect(() => {
     isGameOverRef.current = isGameOver;
   }, [isGameOver]);
@@ -95,14 +96,19 @@ export default function MultiplayerGame() {
     on('GAME_OVER', handleGameOver);
     on('ERROR', handleError);
 
+    const activateTimer = setTimeout(() => {
+      activatedRef.current = true;
+    }, 100);
+
     return () => {
+      clearTimeout(activateTimer);
       off('BOARD_UPDATE', handleBoardUpdate);
       off('GAME_OVER', handleGameOver);
       off('ERROR', handleError);
 
-      // Se o componente for desmontado antes do jogo terminar (ex: voltar no navegador), envia FORFEIT
-      if (!isGameOverRef.current && gameId) {
+      if (activatedRef.current && !isGameOverRef.current && gameId) {
         send('FORFEIT', { gameId });
+        activatedRef.current = false;
       }
     };
   }, [gameId, on, off, user, navigate, send]);
@@ -161,6 +167,7 @@ export default function MultiplayerGame() {
               isGameOver={isGameOver}
               gameResult={gameResult}
               reason={gameReason}
+              playerSymbol={mySymbol}
               onPlayAgain={handlePlayAgain}
               onExit={handleForfeit}
             />
