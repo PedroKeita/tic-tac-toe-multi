@@ -1,0 +1,16 @@
+node_modules
+dist
+build
+target
+.git
+.gitignore
+.env
+.env.local
+.env.*.local
+*.md
+.DS_Store
+.vscode
+.idea
+tictactoe.db
+*.log
+data
